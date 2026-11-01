@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Money Map</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+<style>
+:root { color-scheme: light; --surface:#fcfcfb; --raised:#ffffff; --line:#e4e3de; --text:#0b0b0b; --muted:#52514e; --out:#2a78d6; --in:#eb6834; --mark:#1baf7a; --hover:#f0efec; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --surface:#1a1a19; --raised:#242423; --line:#383835; --text:#f0efec; --muted:#c3c2b7; --out:#3987e5; --in:#d95926; --mark:#199e70; --hover:#2e2e2c; } }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--surface); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+#app { display:grid; grid-template-columns:minmax(0,1fr) 460px; height:100dvh; }
+#map { position:relative; min-width:0; }
+#side { overflow-y:auto; border-left:1px solid var(--line); padding:12px 16px 32px; background:var(--surface); }
+h1 { font-size:15px; margin:0; font-weight:650; }
+h2 { font-size:12.5px; margin:20px 0 6px; font-weight:650; color:var(--muted); }
+a { color:var(--out); }
+button, select, input { font:inherit; color:inherit; }
+.top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; }
+.linkish { background:none; border:0; padding:0; color:var(--out); cursor:pointer; text-align:left; }
+.ask { display:flex; gap:6px; }
+.ask input { flex:1; min-width:0; padding:9px 12px; background:var(--raised); border:1px solid var(--line); border-radius:8px; }
+.btn { padding:8px 11px; background:var(--raised); border:1px solid var(--line); border-radius:8px; cursor:pointer; min-height:38px; }
+.btn:hover { background:var(--hover); }
+.btn[aria-pressed=true] { border-color:var(--out); color:var(--out); }
+#answer { margin-top:10px; padding:10px 12px; background:var(--raised); border:1px solid var(--line); border-radius:8px; }
+#answer p:first-child { margin-top:0; } #answer p:last-child { margin-bottom:0; }
+#answer table { border-collapse:collapse; width:100%; font-size:13px; } #answer td, #answer th { border-bottom:1px solid var(--line); padding:3px 6px 3px 0; text-align:left; }
+#answer .q { color:var(--muted); font-size:12.5px; margin-bottom:6px; }
+.row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; align-items:center; }
+.row select { padding:7px 8px; background:var(--raised); border:1px solid var(--line); border-radius:8px; max-width:100%; min-height:36px; }
+#dataset { flex:1 1 100%; }
+.search { position:relative; margin-top:10px; }
+.search input { width:100%; padding:8px 12px; background:var(--raised); border:1px solid var(--line); border-radius:8px; }
+#hits { position:absolute; z-index:5; left:0; right:0; background:var(--raised); border:1px solid var(--line); border-radius:8px; margin-top:2px; max-height:340px; overflow:auto; box-shadow:0 4px 18px rgba(0,0,0,.15); }
+#hits button { display:block; width:100%; text-align:left; padding:7px 12px; background:none; border:0; cursor:pointer; }
+#hits button:hover { background:var(--hover); }
+#hits small, .note { color:var(--muted); font-size:12.5px; }
+.crumbs { margin-top:12px; font-size:13px; color:var(--muted); }
+.crumbs button { background:none; border:0; padding:0; color:var(--out); cursor:pointer; }
+.crumbs b { color:var(--text); font-size:16px; font-weight:650; display:block; }
+.stats { display:grid; grid-template-columns:1fr auto; gap:1px 12px; font-size:13px; }
+.stats span:nth-child(even) { text-align:right; font-variant-numeric:tabular-nums; }
+.stats span:nth-child(odd) { color:var(--muted); }
+.bar { display:block; width:100%; background:none; border:0; padding:4px 0; cursor:pointer; text-align:left; border-radius:4px; }
+.bar:hover { background:var(--hover); }
+.bar .l { display:flex; justify-content:space-between; gap:12px; font-size:13px; }
+.bar .l span:last-child { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.bar .t { height:6px; margin-top:2px; border-radius:0 4px 4px 0; background:var(--out); min-width:2px; }
+.bar.in .t { background:var(--in); }
+.bar.plain { cursor:default; } .bar.plain:hover { background:none; }
+.chips { display:flex; flex-wrap:wrap; gap:4px; }
+.chip { padding:4px 9px; border:1px solid var(--line); border-radius:999px; background:var(--raised); cursor:pointer; font-size:12.5px; }
+.chip:hover { background:var(--hover); } .chip.on { border-color:var(--out); color:var(--out); }
+#legend { position:absolute; left:12px; bottom:28px; background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; max-width:320px; }
+#legend .ramp { height:8px; border-radius:4px; background:linear-gradient(to right,#cde2fb,#86b6ef,#3987e5,#256abf,#0d366b); margin:4px 0 2px; }
+#legend .ends { display:flex; justify-content:space-between; color:var(--muted); }
+#sites { position:absolute; left:12px; top:12px; display:flex; flex-wrap:wrap; gap:4px; max-width:calc(100% - 70px); }
+#sites .chip { display:inline-flex; gap:5px; align-items:center; } #sites img { width:14px; height:14px; }
+#sources { position:fixed; inset:0; z-index:20; background:var(--surface); overflow:auto; padding:16px; display:none; }
+#sources table { border-collapse:collapse; width:100%; font-size:13px; }
+#sources td, #sources th { border-bottom:1px solid var(--line); padding:5px 10px 5px 0; text-align:left; vertical-align:top; }
+#sources th { position:sticky; top:0; background:var(--surface); }
+#sources input { padding:7px 10px; background:var(--raised); border:1px solid var(--line); border-radius:8px; width:320px; max-width:100%; }
+.maplibregl-popup-content { background:var(--raised); color:var(--text); font-size:13px; } .maplibregl-popup-tip { display:none; }
+@media (max-width:820px) { #app { grid-template-columns:1fr; grid-template-rows:48dvh 1fr; } #side { border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"><div id="sites"></div><div id="legend" hidden></div></div>
+  <div id="side">
+    <div class="top"><h1>Money Map</h1><button class="linkish" id="open-sources"></button></div>
+    <form class="ask" id="ask">
+      <input id="q" placeholder="Ask" aria-label="Ask" autocomplete="off">
+      <button class="btn" type="button" id="mic" aria-label="Speak" aria-pressed="false" hidden>Speak</button>
+      <button class="btn" id="send">Ask</button>
+    </form>
+    <div id="answer" hidden></div>
+    <div class="search"><input id="find" placeholder="Find a place or sector" aria-label="Find a place or sector" autocomplete="off"><div id="hits" hidden></div></div>
+    <div class="row">
+      <select id="dataset" aria-label="Data"></select>
+      <select id="year" aria-label="Year"></select>
+      <button class="btn" id="dir-out" type="button">Out</button>
+      <button class="btn" id="dir-in" type="button">In</button>
+    </div>
+    <div class="note" id="about"></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div id="sector-crumbs" class="crumbs"></div>
+    <div id="body"></div>
+  </div>
+</div>
+<div id="sources"></div>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+<script src="https://unpkg.com/dompurify@3.1.6/dist/purify.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const RAMP = ['#cde2fb','#9ec5f4','#6da7ec','#3987e5','#256abf','#184f95','#0d366b'];
+const ICONS = {power_plant:'zap', mine:'pickaxe', port:'anchor', factory:'factory', company:'building-2', government:'landmark', lobbyist:'megaphone', ngo:'heart-handshake'};
+const KIND_NAMES = {power_plant:'Power plants', mine:'Mines', port:'Ports', factory:'Factories', company:'Companies', government:'Government', lobbyist:'Lobbyists', ngo:'NGOs'};
+const state = {place:null, key:null, year:null, dir:'out', sector:null, kinds:new Set()};
+let datasets = [], countries = {}, history = [], placeInfo = null, entityTimer = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = async (path, params) => {
+  const u = new URL('api/' + path, location.href.split('#')[0]);
+  Object.entries(params || {}).forEach(([k, v]) => { if (v !== null && v !== undefined && v !== '') u.searchParams.set(k, v); });
+  const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json();
+};
+function fmt(v, unit) {
+  if (v === null || v === undefined) return '';
+  const a = Math.abs(v), s = a >= 1e12 ? (v/1e12).toFixed(a >= 1e13 ? 1 : 2) + 'T' : a >= 1e9 ? (v/1e9).toFixed(a >= 1e11 ? 0 : 1) + 'B' : a >= 1e6 ? (v/1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M' : a >= 1e3 ? (v/1e3).toFixed(a >= 1e5 ? 0 : 1) + 'K' : (a < 10 && a !== Math.floor(a) ? v.toFixed(2) : Math.round(v).toString());
+  if (/^USD/.test(unit || '')) return '$' + s + (unit === 'USD' ? '' : ' ' + unit.replace('USD_', '') + ' dollars');
+  return s + (unit ? ' ' + unit : '');
+}
+const ds = () => datasets.find(d => dkey(d) === state.key);
+const dkey = d => d.source_id + ':' + d.measure_id + ':' + d.kind;
+
+// Map
+const map = new maplibregl.Map({container:'map', style:'https://tiles.openfreemap.org/styles/' + (dark ? 'dark' : 'positron'), center:[30, 15], zoom:1.6, attributionControl:{compact:true}});
+map.addControl(new maplibregl.NavigationControl({visualizePitch:false}), 'top-right');
+const popup = new maplibregl.Popup({closeButton:false, closeOnClick:false, offset:8});
+const emptyFC = {type:'FeatureCollection', features:[]};
+
+function arcCoords(a, b) {
+  const rad = Math.PI/180, deg = 180/Math.PI;
+  const [lon1, lat1, lon2, lat2] = [a[0]*rad, a[1]*rad, b[0]*rad, b[1]*rad];
+  const d = 2*Math.asin(Math.sqrt(Math.sin((lat2-lat1)/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin((lon2-lon1)/2)**2));
+  if (!d) return [a, b];
+  const out = [];
+  let prev = null;
+  for (let i = 0; i <= 48; i++) {
+    const f = i/48, A = Math.sin((1-f)*d)/Math.sin(d), B = Math.sin(f*d)/Math.sin(d);
+    const x = A*Math.cos(lat1)*Math.cos(lon1) + B*Math.cos(lat2)*Math.cos(lon2), y = A*Math.cos(lat1)*Math.sin(lon1) + B*Math.cos(lat2)*Math.sin(lon2), z = A*Math.sin(lat1) + B*Math.sin(lat2);
+    let lon = Math.atan2(y, x)*deg; const lat = Math.atan2(z, Math.sqrt(x*x+y*y))*deg;
+    if (prev !== null) { while (lon - prev > 180) lon -= 360; while (lon - prev < -180) lon += 360; }
+    prev = lon; out.push([lon, lat]);
+  }
+  return out;
+}
+
+map.on('style.load', async () => {
+  map.setProjection({type:'globe'});
+  const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+  map.addSource('countries', {type:'geojson', data:'static/countries.geojson'});
+  map.addLayer({id:'country-fill', type:'fill', source:'countries', paint:{'fill-color':'#000', 'fill-opacity':0}}, firstLabel);
+  map.addLayer({id:'country-line', type:'line', source:'countries', filter:['==',['get','iso3'],''], paint:{'line-color':css('--text'), 'line-width':1.5}}, firstLabel);
+  map.addSource('arcs', {type:'geojson', data:emptyFC});
+  map.addLayer({id:'arcs', type:'line', source:'arcs', layout:{'line-cap':'round'}, paint:{'line-color':['get','color'], 'line-width':['get','width'], 'line-opacity':.8}});
+  map.addSource('marks', {type:'geojson', data:emptyFC});
+  map.addLayer({id:'marks', type:'circle', source:'marks', paint:{'circle-radius':6, 'circle-color':css('--mark'), 'circle-stroke-width':2, 'circle-stroke-color':css('--surface')}});
+  map.addLayer({id:'mark-labels', type:'symbol', source:'marks', layout:{'text-field':['get','label'], 'text-size':12, 'text-offset':[0,1.1], 'text-anchor':'top', 'text-font':['Noto Sans Regular']}, paint:{'text-color':css('--text'), 'text-halo-color':css('--surface'), 'text-halo-width':1.5}});
+  map.addSource('entities', {type:'geojson', data:emptyFC, cluster:true, clusterRadius:36, clusterMaxZoom:9});
+  map.addLayer({id:'clusters', type:'circle', source:'entities', filter:['has','point_count'], paint:{'circle-color':css('--raised'), 'circle-stroke-color':css('--text'), 'circle-stroke-width':1, 'circle-radius':['step',['get','point_count'],11,50,15,500,20]}});
+  map.addLayer({id:'cluster-count', type:'symbol', source:'entities', filter:['has','point_count'], layout:{'text-field':['get','point_count_abbreviated'], 'text-size':11, 'text-font':['Noto Sans Regular']}, paint:{'text-color':css('--text')}});
+  await loadIcons();
+  map.addLayer({id:'entity-icons', type:'symbol', source:'entities', filter:['!',['has','point_count']], layout:{'icon-image':['concat','k-',['get','icon']], 'icon-size':.5, 'icon-allow-overlap':true}});
+  map.on('click', 'country-fill', e => { const c = countries[e.features[0].properties.iso3]; if (c) select(c.id); });
+  map.on('mousemove', 'country-fill', e => { const p = e.features[0].properties; const v = lastValues[p.iso3]; map.getCanvas().style.cursor = 'pointer'; popup.setLngLat(e.lngLat).setHTML('<b>' + esc(p.name) + '</b>' + (v !== undefined ? '<br>' + fmt(v, ds()?.unit) : '')).addTo(map); });
+  map.on('mouseleave', 'country-fill', () => { map.getCanvas().style.cursor = ''; popup.remove(); });
+  map.on('click', 'entity-icons', e => { const p = e.features[0].properties; new maplibregl.Popup({offset:10}).setLngLat(e.lngLat).setHTML('<b>' + esc(p.name) + '</b><br>' + esc(KIND_NAMES[p.kind] || p.kind) + ' · ' + esc(p.source) + (p.url && /^https?:/.test(p.url) ? '<br><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.url) + '</a>' : '')).addTo(map); });
+  map.on('click', 'clusters', e => { map.easeTo({center:e.features[0].geometry.coordinates, zoom:map.getZoom() + 2}); });
+  map.on('moveend', () => { clearTimeout(entityTimer); entityTimer = setTimeout(loadEntities, 250); });
+  await init();
+});
+
+async function loadIcons() {
+  await Promise.all([...Object.entries(ICONS), ['other','map-pin']].map(async ([k, name]) => {
+    const svg = (await (await fetch('https://unpkg.com/lucide-static@0.460.0/icons/' + name + '.svg')).text()).replace(/stroke="currentColor"/, 'stroke="#ffffff"');
+    const img = new Image(48, 48); img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    await img.decode();
+    const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    x.fillStyle = '#184f95'; x.beginPath(); x.arc(32, 32, 31, 0, 7); x.fill(); x.drawImage(img, 14, 14, 36, 36);
+    map.addImage('k-' + k, x.getImageData(0, 0, 64, 64));
+  }));
+}
+
+let lastValues = {};
+async function paintMap() {
+  const d = ds(); if (!d) return;
+  const values = await api('map', {source:d.source_id, measure:d.measure_id, year:state.year, kind:d.kind, dir:state.dir, sector:state.sector});
+  lastValues = {};
+  const cs = values.filter(r => r.kind === 'country' && r.value > 0);
+  cs.forEach(r => lastValues[r.iso3] = r.value);
+  if (!cs.length) { map.setPaintProperty('country-fill', 'fill-opacity', 0); $('legend').hidden = true; return values; }
+  const lo = Math.log10(cs[cs.length-1].value), hi = Math.log10(cs[0].value), m = ['match', ['get','iso3']];
+  cs.forEach(r => { m.push(r.iso3, RAMP[Math.min(RAMP.length-1, Math.floor((Math.log10(r.value)-lo)/((hi-lo)||1)*RAMP.length))]); });
+  m.push('rgba(0,0,0,0)');
+  map.setPaintProperty('country-fill', 'fill-color', m);
+  map.setPaintProperty('country-fill', 'fill-opacity', .72);
+  $('legend').hidden = false;
+  $('legend').innerHTML = esc(d.measure_name) + ', ' + state.year + ' (log scale)<div class="ramp"></div><div class="ends"><span>' + fmt(cs[cs.length-1].value, d.unit) + '</span><span>' + fmt(cs[0].value, d.unit) + '</span></div>';
+  return values;
+}
+
+function drawArcs(list, color) {
+  const max = Math.max(...list.map(r => r.value), 1);
+  map.getSource('arcs').setData({type:'FeatureCollection', features: list.filter(r => r.a_lat !== null && r.b_lat !== null).map(r => ({type:'Feature', geometry:{type:'LineString', coordinates:arcCoords([r.a_lon, r.a_lat], [r.b_lon, r.b_lat])}, properties:{color, width:1 + 6*Math.sqrt(r.value/max)}}))});
+}
+
+async function loadEntities() {
+  if (!state.kinds.size || !map.getSource('entities')) { map.getSource('entities')?.setData(emptyFC); return; }
+  const b = map.getBounds();
+  const list = await api('entities', {west:Math.max(b.getWest(),-180), south:Math.max(b.getSouth(),-90), east:Math.min(b.getEast(),180), north:Math.min(b.getNorth(),90), kinds:[...state.kinds].join(',')});
+  map.getSource('entities').setData({type:'FeatureCollection', features:list.map(e => ({type:'Feature', geometry:{type:'Point', coordinates:[e.lon, e.lat]}, properties:{name:e.name, kind:e.kind, url:e.url, source:e.source, icon:ICONS[e.kind] ? e.kind : 'other'}}))});
+}
+
+// Panel
+function bars(list, opts) {
+  const max = Math.max(...list.map(r => r.value), 1);
+  return list.map(r => '<button class="bar ' + (opts.cls || '') + (opts.click ? '' : ' plain') + '" ' + (opts.click ? 'data-' + opts.click + '="' + r.id + '"' : 'type="button"') + '><div class="l"><span>' + esc(r.label) + '</span><span>' + fmt(r.value, opts.unit) + '</span></div><div class="t" style="width:' + Math.max(.5, 100*r.value/max) + '%"></div></button>').join('');
+}
+
+async function render() {
+  writeHash();
+  const d = ds();
+  $('dir-out').setAttribute('aria-pressed', state.dir === 'out'); $('dir-in').setAttribute('aria-pressed', state.dir === 'in');
+  const isFlow = d?.kind === 'flow';
+  $('dir-out').hidden = $('dir-in').hidden = !isFlow;
+  $('about').innerHTML = d ? (d.source_url ? '<a href="' + esc(d.source_url) + '" target="_blank" rel="noopener">' + esc(d.source_name) + '</a>' : esc(d.source_name)) + (d.about ? '. ' + esc(d.about) : '') : '';
+  const body = $('body'); let html = '';
+  // place
+  placeInfo = state.place ? await api('place/' + state.place) : null;
+  $('crumbs').innerHTML = placeInfo ? placeInfo.path.slice(0, -1).map(p => '<button data-place="' + p.id + '">' + esc(p.name) + '</button>').join(' / ') + '<b>' + esc(placeInfo.name) + '</b>' : '<b>World</b>';
+  map.getLayer('country-line') && map.setFilter('country-line', ['==', ['get','iso3'], placeInfo?.iso3 || '']);
+  // sector
+  let sectorInfo = state.sector ? await api('sector/' + state.sector) : null;
+  $('sector-crumbs').innerHTML = sectorInfo ? '<button data-sector="">All sectors</button> / ' + sectorInfo.path.map(s => '<button data-sector="' + s.id + '">' + esc(s.name) + '</button>').join(' / ') : '';
+  if (!d) { body.innerHTML = '<p class="note">No data loaded yet.</p>'; return; }
+  const q = {source:d.source_id, measure:d.measure_id, year:state.year};
+  const values = await paintMap();
+  if (placeInfo?.headline?.length) html += '<h2>' + esc(placeInfo.name) + ' in numbers</h2><div class="stats">' + placeInfo.headline.map(h => '<span>' + esc(h.name) + ', ' + h.year + '</span><span>' + fmt(h.value, h.unit) + '</span>').join('') + '</div>';
+  if (isFlow) {
+    const list = await api('partners', {...q, place:state.place, dir:state.dir, sector:state.sector});
+    drawArcs(list, state.dir === 'out' ? css('--out') : css('--in'));
+    if (placeInfo) {
+      if (list.length) html += '<h2>' + esc(d.measure_name) + ' ' + (state.dir === 'out' ? 'from ' : 'into ') + esc(placeInfo.name) + ', ' + state.year + '</h2>' + bars(list.map(r => ({id:r.b_id, label:r.b_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir});
+      else html += '<p class="note">' + esc(placeInfo.name) + ': no rows here for this year.</p>';
+    } else {
+      html += '<h2>Largest pairs, ' + state.year + '</h2>' + bars(list.slice(0, 10).map(r => ({id:r.a_id, label:r.a_name + ' → ' + r.b_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir});
+    }
+  } else {
+    map.getSource('arcs').setData(emptyFC);
+  }
+  if (!placeInfo || !isFlow) {
+    const ranked = (values || []).filter(r => r.kind === 'country' || r.kind === 'admin1').slice(0, 25);
+    if (ranked.length) html += '<h2>Largest ' + (d.kind === 'flow' ? (state.dir === 'out' ? 'senders' : 'receivers') : 'places') + ', ' + state.year + '</h2>' + bars(ranked.map(r => ({id:r.id, label:r.name, value:r.value})), {unit:d.unit, click:'place', cls:isFlow ? state.dir : ''});
+  }
+  if (d.has_sector) {
+    const sizes = await api('sizes', {...q, kind:d.kind, place:state.place, dir:state.dir, parent:state.sector});
+    if (sizes.length) html += '<h2>By sector, ' + state.year + '</h2>' + bars(sizes.map(s => ({id:s.id, label:s.name, value:s.value})), {unit:d.unit, click:'sector', cls:isFlow ? state.dir : ''});
+  }
+  if (placeInfo) {
+    if (placeInfo.entities.length) {
+      html += '<h2>Organizations and sites</h2><div class="chips">' + placeInfo.entities.map(e => '<button class="chip" data-kind="' + esc(e.kind) + '">' + esc(KIND_NAMES[e.kind] || e.kind) + ' ' + e.n.toLocaleString() + '</button>').join('') + '</div><div id="entity-list"></div>';
+      const owners = await api('place/' + state.place + '/owners');
+      if (owners.length) html += '<h2>Foreign parents of companies here</h2>' + bars(owners.slice(0, 15).map(o => ({id:o.country_id, label:o.parent + ' (' + o.country + ')', value:o.children})), {unit:'companies', click:'place'});
+    }
+    if (placeInfo.children.length) html += '<h2>Inside ' + esc(placeInfo.name) + '</h2><div class="chips">' + placeInfo.children.map(c => '<button class="chip" data-place="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
+    const elsewhere = datasets.filter(x => placeInfo.datasets.includes(dkey(x)) && dkey(x) !== state.key);
+    if (elsewhere.length) html += '<h2>Other data on ' + esc(placeInfo.name) + '</h2><div class="chips">' + elsewhere.map(x => '<button class="chip" data-dataset="' + dkey(x) + '">' + esc(x.measure_name) + '</button>').join('') + '</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function select(id, fly = true) {
+  state.place = id;
+  await render();
+  if (fly && placeInfo?.lat !== null && placeInfo?.lat !== undefined) {
+    const z = {world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 3;
+    map.flyTo({center:[placeInfo.lon, placeInfo.lat], zoom:z});
+  }
+}
+
+function setDataset(key) {
+  state.key = key;
+  const d = ds();
+  if (d && !d.years.includes(state.year)) state.year = d.years[d.years.length-1];
+  $('dataset').value = key;
+  $('year').innerHTML = (d?.years || []).slice().reverse().map(y => '<option>' + y + '</option>').join('');
+  $('year').value = state.year;
+  if (!d?.has_sector) state.sector = null;
+}
+
+// Events
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-place],[data-sector],[data-dataset],[data-kind]');
+  if (!t) return;
+  if (t.dataset.place) select(+t.dataset.place);
+  else if ('sector' in t.dataset) { state.sector = t.dataset.sector ? +t.dataset.sector : null; render(); }
+  else if (t.dataset.dataset) { setDataset(t.dataset.dataset); render(); }
+  else if (t.dataset.kind) listEntities(t.dataset.kind);
+});
+async function listEntities(kind) {
+  const list = await api('place/' + state.place + '/entities', {kind, limit:100});
+  $('entity-list').innerHTML = '<h2>' + esc(KIND_NAMES[kind] || kind) + '</h2>' + list.map(e => '<div>' + (e.url && /^https?:/.test(e.url) ? '<a href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(e.name) + '</a>' : esc(e.name)) + '</div>').join('');
+}
+$('dataset').onchange = e => { setDataset(e.target.value); render(); };
+$('year').onchange = e => { state.year = +e.target.value; render(); };
+$('dir-out').onclick = () => { state.dir = 'out'; render(); };
+$('dir-in').onclick = () => { state.dir = 'in'; render(); };
+
+let findTimer;
+$('find').oninput = e => {
+  clearTimeout(findTimer);
+  const q = e.target.value.trim();
+  if (q.length < 2) { $('hits').hidden = true; return; }
+  findTimer = setTimeout(async () => {
+    const r = await api('search', {q});
+    $('hits').innerHTML = r.places.map(p => '<button data-hit-place="' + p.id + '">' + esc(p.name) + ' <small>' + esc(p.kind) + (p.parent ? ', ' + esc(p.parent) : '') + '</small></button>').join('') + r.sectors.map(s => '<button data-hit-sector="' + s.id + '" data-scheme="' + esc(s.scheme) + '">' + esc(s.name) + ' <small>' + esc(s.scheme) + ' ' + esc(s.code) + '</small></button>').join('');
+    $('hits').hidden = false;
+  }, 200);
+};
+$('hits').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $('hits').hidden = true; $('find').value = '';
+  if (b.dataset.hitPlace) select(+b.dataset.hitPlace);
+  else {
+    state.sector = +b.dataset.hitSector;
+    const scheme = b.dataset.scheme;
+    const match = await api('datasets_for_scheme', {scheme});
+    if (match.length && !match.some(k => k === state.key)) setDataset(match[0]);
+    render();
+  }
+};
+
+// Ask
+async function submitAsk(ev) {
+  ev?.preventDefault();
+  const question = $('q').value.trim(); if (!question) return;
+  $('answer').hidden = false; $('answer').innerHTML = '<div class="q">' + esc(question) + '</div>Working';
+  $('send').disabled = true;
+  try {
+    const r = await fetch('api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question, history})});
+    if (r.status === 401) { showLogin(question); return; }
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    const out = await r.json();
+    history.push([question, out.answer]);
+    $('answer').innerHTML = '<div class="q">' + esc(question) + '</div>' + DOMPurify.sanitize(marked.parse(out.answer));
+    $('answer').querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+    showAnswerMap(out.map || {});
+    $('q').value = '';
+  } catch (err) {
+    $('answer').innerHTML = '<div class="q">' + esc(question) + '</div>Failed: ' + esc(err.message);
+  } finally { $('send').disabled = false; }
+}
+function showLogin() {
+  $('answer').innerHTML = '<form id="login" class="ask"><input id="pw" type="password" placeholder="Team password" aria-label="Team password" autocomplete="current-password"><button class="btn">Sign in</button></form><div class="note" id="login-note"></div>';
+  $('send').disabled = false;
+  $('login').onsubmit = async e => {
+    e.preventDefault();
+    const r = await fetch('api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:$('pw').value})});
+    if (r.ok) submitAsk(); else $('login-note').textContent = 'Wrong password';
+  };
+  $('pw').focus();
+}
+function showAnswerMap(m) {
+  const feats = [], pts = [];
+  (m.places || []).forEach(p => { if (p.lat !== null) { feats.push({type:'Feature', geometry:{type:'Point', coordinates:[p.lon, p.lat]}, properties:{label:p.label ? p.name + ': ' + p.label : p.name}}); pts.push([p.lon, p.lat]); } });
+  (m.points || []).forEach(p => { feats.push({type:'Feature', geometry:{type:'Point', coordinates:[p.lon, p.lat]}, properties:{label:p.label || ''}}); pts.push([p.lon, p.lat]); });
+  map.getSource('marks').setData({type:'FeatureCollection', features:feats});
+  if (m.flows?.length) {
+    const max = Math.max(...m.flows.map(f => f.value || 1), 1);
+    map.getSource('arcs').setData({type:'FeatureCollection', features:m.flows.filter(f => f.from.lat !== null && f.to.lat !== null).map(f => { pts.push([f.from.lon, f.from.lat], [f.to.lon, f.to.lat]); return {type:'Feature', geometry:{type:'LineString', coordinates:arcCoords([f.from.lon, f.from.lat], [f.to.lon, f.to.lat])}, properties:{color:css('--mark'), width:1 + 6*Math.sqrt((f.value || 1)/max)}}; })});
+  }
+  if (pts.length > 1) { const b = new maplibregl.LngLatBounds(pts[0], pts[0]); pts.forEach(p => b.extend(p)); map.fitBounds(b, {padding:70, maxZoom:6}); }
+  else if (pts.length) map.flyTo({center:pts[0], zoom:5});
+}
+$('ask').onsubmit = submitAsk;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  $('mic').hidden = false;
+  $('mic').onclick = () => {
+    const rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true;
+    $('mic').setAttribute('aria-pressed', 'true');
+    rec.onresult = e => { const r = e.results[e.results.length-1]; $('q').value = r[0].transcript; if (r.isFinal) submitAsk(); };
+    rec.onend = () => $('mic').setAttribute('aria-pressed', 'false');
+    rec.start();
+  };
+}
+
+// Sources
+$('open-sources').onclick = async () => {
+  const list = await api('sources');
+  const box = $('sources'); box.style.display = 'block';
+  const draw = q => {
+    const shown = list.filter(s => !q || (s.name + ' ' + (s.about || '') + ' ' + (s.publisher || '')).toLowerCase().includes(q));
+    box.querySelector('tbody').innerHTML = shown.map(s => '<tr><td>' + esc(s.status) + '</td><td>' + (s.url ? '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.name) + '</a>' : esc(s.name)) + '</td><td>' + esc(s.about) + '</td><td>' + esc(s.coverage) + '</td><td>' + esc(s.access) + '</td><td>' + (s.row_count ? s.row_count.toLocaleString() : '') + '</td><td>' + esc(s.status_note) + '</td></tr>').join('');
+  };
+  box.innerHTML = '<div class="top"><h1>Sources</h1><button class="btn" id="close-sources">Close</button></div><input id="source-find" placeholder="Filter" aria-label="Filter sources"><table><thead><tr><th>Status</th><th>Name</th><th>Holds</th><th>Coverage</th><th>Access</th><th>Rows</th><th>Note</th></tr></thead><tbody></tbody></table>';
+  draw('');
+  $('source-find').oninput = e => draw(e.target.value.toLowerCase());
+  $('close-sources').onclick = () => box.style.display = 'none';
+};
+
+// Link state
+function writeHash() {
+  const p = new URLSearchParams();
+  if (state.place) p.set('place', state.place);
+  if (ds()) { p.set('source', ds().source); p.set('measure', ds().measure); p.set('kind', ds().kind); }
+  if (state.year) p.set('year', state.year);
+  if (state.dir !== 'out') p.set('dir', state.dir);
+  if (state.sector) p.set('sector', state.sector);
+  if (state.kinds.size) p.set('sites', [...state.kinds].join(','));
+  history_replace('#' + p);
+}
+function history_replace(h) { window.history.replaceState(null, '', h); }
+
+async function init() {
+  [datasets] = await Promise.all([api('datasets'), api('countries').then(c => c.forEach(x => countries[x.iso3] = x))]);
+  const srcs = await api('sources');
+  $('open-sources').textContent = srcs.filter(s => s.status === 'loaded').length + ' sources loaded, ' + srcs.filter(s => s.status === 'listed').length + ' listed';
+  const groups = {};
+  datasets.forEach(d => (groups[d.family] = groups[d.family] || []).push(d));
+  $('dataset').innerHTML = Object.keys(groups).sort().map(f => '<optgroup label="' + esc(f.replace(/_/g, ' ')) + '">' + groups[f].map(d => '<option value="' + dkey(d) + '">' + esc(d.measure_name) + ' (' + esc(d.source) + ')</option>').join('') + '</optgroup>').join('');
+  const kinds = await api('entity_kinds');
+  $('sites').innerHTML = kinds.filter(k => k.with_coords).map(k => '<button class="chip" data-site="' + esc(k.kind) + '"><img alt="" src="https://unpkg.com/lucide-static@0.460.0/icons/' + (ICONS[k.kind] || 'map-pin') + '.svg">' + esc(KIND_NAMES[k.kind] || k.kind) + '</button>').join('');
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('place')) state.place = +h.get('place');
+  if (h.get('dir')) state.dir = h.get('dir');
+  if (h.get('sector')) state.sector = +h.get('sector');
+  if (h.get('year')) state.year = +h.get('year');
+  (h.get('sites') || '').split(',').filter(Boolean).forEach(k => state.kinds.add(k));
+  document.querySelectorAll('[data-site]').forEach(b => {
+    b.classList.toggle('on', state.kinds.has(b.dataset.site));
+    b.onclick = () => { const k = b.dataset.site; state.kinds.has(k) ? state.kinds.delete(k) : state.kinds.add(k); b.classList.toggle('on'); writeHash(); loadEntities(); };
+  });
+  const fromHash = datasets.find(d => d.source === h.get('source') && d.measure === h.get('measure') && d.kind === h.get('kind'));
+  const start = fromHash || datasets.find(d => d.family === 'goods_trade' && d.kind === 'flow') || datasets.find(d => d.kind === 'flow') || datasets[0];
+  if (start) setDataset(dkey(start));
+  await render();
+  loadEntities();
+  if (state.place && placeInfo?.lat != null) map.jumpTo({center:[placeInfo.lon, placeInfo.lat], zoom:{country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 2});
+}
+</script>
+</body>
+</html>

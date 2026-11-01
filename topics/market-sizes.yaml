@@ -1,0 +1,8 @@
+slug: market-sizes
+name: Market sizes by sector
+description: Published estimates of market size, from market research firms and industry bodies. Each is the publisher's estimate.
+expand:
+  - values:
+      sector: [solar panels, solar energy, wind energy, batteries, electric vehicles, recycling, plastic recycling, metal scrap, e-waste, waste management, cotton, textiles, apparel, leather, footwear, agriculture, fertilizer, seeds, food processing, fisheries, forestry, timber, coffee, cocoa, rice, palm oil, sugar, dairy, meat, water treatment, desalination, oil and gas, coal, natural gas, power generation, electricity grid, hydrogen, nuclear energy, carbon credits, mining, copper, lithium, cobalt, rare earths, gold, steel, aluminum, cement, construction, real estate, housing, logistics, freight shipping, ports, air cargo, railways, aviation, automotive, machinery, semiconductors, telecommunications, mobile money, software, cloud computing, artificial intelligence, cybersecurity, banking, insurance, remittances, payments, microfinance, impact investing, private equity, venture capital, pharmaceuticals, medical devices, hospitals, health insurance, education, higher education, vocational training, tourism, hospitality, retail, e-commerce, advertising, media, consumer goods, cosmetics, chemicals, plastics, packaging, paper, furniture, legal services, accounting, management consulting, regulatory compliance, supply chain traceability, ESG reporting, labor recruitment, staffing, humanitarian aid, international development, government procurement]
+    templates:
+      - "{sector} global market size estimate by region latest report"
