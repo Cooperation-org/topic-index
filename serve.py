@@ -136,8 +136,10 @@ def result_row(url, title, host, page_age, text):
 def browse(cur, slug, key, values):
     out = ""
     if slug == "gp-theses":
-        cur.execute("""SELECT f.host, f.name, count(p.id) FROM funds f LEFT JOIN pages p ON p.host = f.host
-                       GROUP BY f.host, f.name ORDER BY lower(f.name)""")
+        # Imported funds carry their own name; discovered ones only a page title, so show the site.
+        cur.execute("""SELECT f.host, CASE WHEN f.found_via LIKE 'import:%%' THEN f.name ELSE f.host END n,
+                              count(p.id) FROM funds f LEFT JOIN pages p ON p.host = f.host
+                       GROUP BY f.host, n ORDER BY lower(CASE WHEN f.found_via LIKE 'import:%%' THEN f.name ELSE f.host END)""")
         funds = cur.fetchall()
         out += f'<h2>Funds <span class="n">{len(funds):,}</span></h2><div class="facets">' + "".join(
             f'<a href="?{urlencode(dict(site=h))}">{e(n)} <span class="n">{c:,}</span></a>' for h, n, c in funds) + "</div>"

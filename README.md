@@ -48,6 +48,10 @@ psql "$OWNER_DATABASE_URL" -f schema.sql
 
 The You.com key is read from `$YDC_API_KEY`, `~/.env` or `/opt/shared/tools/ydc.conf`.
 
+## Web
+
+`serve.py`: one page per topic with search (meaning, then words) and the topic's facet values to browse; gp-theses also lists fund sites. Runs as `tmp-topic-index.service` on port 8062, served at https://amebo.linkedtrust.us/topics/ until topics get their own domain.
+
 ## Cost
 
 You.com search: $0.005 per call plus $0.001 per page crawled live (cached pages free). A 50-result query is at most $0.055.
