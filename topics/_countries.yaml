@@ -1,0 +1,78 @@
+# Shared country list; a topic file uses it as `values: {country: countries}`.
+- Argentina
+- Australia
+- Austria
+- Bangladesh
+- Belgium
+- Bolivia
+- Brazil
+- Bulgaria
+- Cameroon
+- Canada
+- Chile
+- China
+- Colombia
+- Costa Rica
+- Croatia
+- Czech Republic
+- Denmark
+- Dominican Republic
+- Ecuador
+- Egypt
+- Estonia
+- Ethiopia
+- Finland
+- France
+- Germany
+- Ghana
+- Greece
+- Guatemala
+- Honduras
+- Hungary
+- India
+- Indonesia
+- Ireland
+- Israel
+- Italy
+- Jamaica
+- Japan
+- Kenya
+- Lithuania
+- Malaysia
+- Mexico
+- Morocco
+- Nepal
+- Netherlands
+- New Zealand
+- Nigeria
+- Norway
+- Pakistan
+- Panama
+- Peru
+- Philippines
+- Poland
+- Portugal
+- Romania
+- Rwanda
+- Senegal
+- Singapore
+- Slovenia
+- South Africa
+- South Korea
+- Spain
+- Sri Lanka
+- Sweden
+- Switzerland
+- Taiwan
+- Tanzania
+- Thailand
+- Turkey
+- Uganda
+- Ukraine
+- United Arab Emirates
+- United Kingdom
+- United States
+- Uruguay
+- Vietnam
+- Zambia
+- Zimbabwe

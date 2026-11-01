@@ -1,0 +1,48 @@
+slug: gp-theses
+name: Fund investment theses
+description: What venture, impact, employee-ownership and other private funds say they invest in, stated by the funds, plus directories of funds.
+queries:
+  - venture capital fund investment thesis examples
+  - impact investing fund investment criteria
+  - employee ownership fund investment criteria
+  - cooperative finance fund investment criteria
+  - community development venture capital fund thesis
+  - list of impact venture capital funds
+  - directory of employee ownership investors
+  - emerging manager venture funds list
+  - open LP fund thesis public
+  - venture fund accepting applications founders
+  - non-dilutive revenue based financing fund criteria
+  - steward ownership investors
+  - purpose foundation steward ownership funds
+  - zebra fund investment criteria
+  - exit to community financing investors
+  - perpetual purpose trust investors
+  - democratic ownership investment fund
+  - solidarity economy investment fund
+  - blended finance fund investment criteria
+  - family office impact investment thesis
+  - climate tech seed fund thesis
+  - fund for founders outside Silicon Valley
+  - fund investing in underrepresented founders thesis
+  - fund investing in founders from Africa thesis
+  - fund investing in Latin American founders thesis
+expand:
+  - values:
+      sector: [climate, agriculture, food systems, fintech, financial inclusion, health, mental health,
+               education, workforce, future of work, civic tech, govtech, democracy, journalism, media,
+               open source, developer tools, AI, AI safety, data privacy, digital identity, trust and safety,
+               supply chain, circular economy, energy, water, housing, real estate, manufacturing,
+               small business, cooperatives, creator economy, web3, decentralized, social impact,
+               gender lens, racial equity, rural, Indigenous, nonprofit tech]
+    templates:
+      - "{sector} venture fund investment thesis"
+      - "{sector} impact fund what we invest in"
+  - values:
+      region: [Africa, East Africa, West Africa, Nigeria, Kenya, South Africa, Latin America, Mexico, Brazil,
+               Colombia, Argentina, Chile, India, Southeast Asia, Indonesia, Philippines, Vietnam, Pakistan,
+               Bangladesh, Middle East, Europe, Nordics, Germany, France, United Kingdom, Eastern Europe,
+               Ukraine, Canada, US Southwest, Arizona, US Midwest, Appalachia]
+    templates:
+      - "{region} early stage venture fund investment thesis"
+      - "{region} impact investment fund criteria"

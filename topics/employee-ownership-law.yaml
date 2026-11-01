@@ -1,0 +1,19 @@
+slug: employee-ownership-law
+name: Employee and worker ownership law, worldwide
+description: Laws, tax rules and regulators for employee share plans, stock options, employee ownership trusts and worker cooperatives, by country.
+queries:
+  - employee ownership legislation comparison by country
+  - worker cooperative law international comparison
+  - employee stock option taxation startups OECD countries comparison
+  - EU employee financial participation law member states
+  - employee ownership trust law
+  - ESOP legal framework developing countries
+  - cross-border employee equity compensation tax compliance
+  - DAO legal wrapper member ownership law
+expand:
+  - values: {country: countries}
+    templates:
+      - "{country} employee share ownership plan law tax"
+      - "{country} employee stock options taxation startups"
+      - "{country} worker cooperative law registration"
+      - "{country} employee ownership trust legislation"

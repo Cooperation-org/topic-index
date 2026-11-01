@@ -1,0 +1,47 @@
+slug: supply-chain-regulation
+name: Supply chain regulation, worldwide
+description: Due diligence, traceability, forced-labour, deforestation, product passport and customs rules for goods supply chains, and the standards used to comply.
+queries:
+  - EU Corporate Sustainability Due Diligence Directive CSDDD requirements timeline
+  - CSDDD omnibus simplification 2026 changes
+  - EU Deforestation Regulation EUDR compliance requirements operators
+  - EUDR delay timeline 2026
+  - EU Battery Regulation battery passport requirements February 2027
+  - EU Ecodesign for Sustainable Products Regulation digital product passport
+  - EU Forced Labour Regulation ban products
+  - EU Conflict Minerals Regulation 3TG importers
+  - EU Carbon Border Adjustment Mechanism CBAM reporting importers
+  - EU Corporate Sustainability Reporting Directive value chain reporting
+  - UN Transparency Protocol UNTP digital product passport specification
+  - UNTP digital conformity credential traceability event
+  - UN/CEFACT recommendation 49 transparency at scale
+  - OECD Due Diligence Guidance for Responsible Supply Chains minerals
+  - Uyghur Forced Labor Prevention Act importer requirements
+  - US Section 307 Tariff Act forced labor withhold release order
+  - Dodd-Frank section 1502 conflict minerals reporting
+  - California Transparency in Supply Chains Act
+  - Germany Supply Chain Due Diligence Act LkSG
+  - France duty of vigilance law
+  - Norway Transparency Act supply chain
+  - Netherlands Child Labour Due Diligence Act
+  - Switzerland due diligence conflict minerals child labour ordinance
+  - UK Modern Slavery Act supply chain statement requirements
+  - Australia Modern Slavery Act reporting requirements
+  - Canada Fighting Against Forced Labour and Child Labour in Supply Chains Act
+  - Japan human rights due diligence guidelines supply chains
+  - Responsible Minerals Assurance Process RMAP
+  - critical minerals traceability regulation cobalt lithium
+  - textile supply chain traceability regulation
+  - food traceability rule FSMA 204
+  - EU General Product Safety Regulation economic operator
+  - EU methane regulation imports
+  - EU packaging and packaging waste regulation supply chain
+  - extended producer responsibility law by country
+  - digital product passport standards GS1 traceability
+  - W3C verifiable credentials supply chain traceability
+expand:
+  - values: {country: countries}
+    templates:
+      - "{country} supply chain due diligence law human rights"
+      - "{country} forced labour import ban customs regulation"
+      - "{country} product traceability export regulation EU compliance"
