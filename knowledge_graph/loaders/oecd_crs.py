@@ -2,6 +2,7 @@
 import csv
 import io
 import re
+import time
 import urllib.error
 
 import kg
@@ -45,6 +46,7 @@ def main():
     for code, _ in recips:
         if l.done(code):
             continue
+        time.sleep(3)
         try:
             body = fetch("%sdata/%s/%s?startPeriod=%d" % (BASE, DATAFLOW, KEY % code, FIRST_YEAR),
                          headers={"Accept": "application/vnd.sdmx.data+csv;version=1.0.0"}, raw=True)

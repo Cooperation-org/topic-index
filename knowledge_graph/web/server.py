@@ -119,7 +119,7 @@ def partners(source: int, measure: int, year: int, place: int | None = None, dir
                          b.lat AS b_lat, b.lon AS b_lon, b.code AS b_code, sum(f.value) AS value
                   FROM {table} f JOIN kg.places a ON a.id = f.{a} JOIN kg.places b ON b.id = f.{b}
                   WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s {sector_cond}
-                    AND f.{a} = ANY(%(ids)s) AND NOT f.{b} = ANY(%(ids)s)
+                    AND f.{a} = ANY(%(ids)s) AND NOT f.{b} = ANY(%(ids)s) AND b.kind NOT IN ('other', 'world')
                   GROUP BY b.id ORDER BY value DESC LIMIT %(limit)s"""
     return rows(sql, params)
 

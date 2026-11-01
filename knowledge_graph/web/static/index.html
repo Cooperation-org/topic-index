@@ -37,6 +37,7 @@ button, select, input { font:inherit; color:inherit; }
 #hits { position:absolute; z-index:5; left:0; right:0; background:var(--raised); border:1px solid var(--line); border-radius:8px; margin-top:2px; max-height:340px; overflow:auto; box-shadow:0 4px 18px rgba(0,0,0,.15); }
 #hits button { display:block; width:100%; text-align:left; padding:7px 12px; background:none; border:0; cursor:pointer; }
 #hits button:hover { background:var(--hover); }
+details summary { cursor:pointer; }
 #hits small, .note { color:var(--muted); font-size:12.5px; }
 .crumbs { margin-top:12px; font-size:13px; color:var(--muted); }
 .crumbs button { background:none; border:0; padding:0; color:var(--out); cursor:pointer; }
@@ -54,6 +55,7 @@ button, select, input { font:inherit; color:inherit; }
 .chips { display:flex; flex-wrap:wrap; gap:4px; }
 .chip { padding:4px 9px; border:1px solid var(--line); border-radius:999px; background:var(--raised); cursor:pointer; font-size:12.5px; }
 .chip:hover { background:var(--hover); } .chip.on { border-color:var(--out); color:var(--out); }
+#legend, #sites { z-index:2; }
 #legend { position:absolute; left:12px; bottom:28px; background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; max-width:320px; }
 #legend .ramp { height:8px; border-radius:4px; background:linear-gradient(to right,#cde2fb,#86b6ef,#3987e5,#256abf,#0d366b); margin:4px 0 2px; }
 #legend .ends { display:flex; justify-content:space-between; color:var(--muted); }
@@ -122,7 +124,8 @@ const ds = () => datasets.find(d => dkey(d) === state.key);
 const dkey = d => d.source_id + ':' + d.measure_id + ':' + d.kind;
 
 // Map
-const map = new maplibregl.Map({container:'map', style:'https://tiles.openfreemap.org/styles/' + (dark ? 'dark' : 'positron'), center:[30, 15], zoom:1.6, attributionControl:{compact:true}});
+function map_start_zoom() { return Math.log2(Math.min(innerWidth - (innerWidth > 820 ? 460 : 0), innerHeight) / 512) + 1.1; }
+const map = new maplibregl.Map({container:'map', style:'https://tiles.openfreemap.org/styles/' + (dark ? 'dark' : 'positron'), center:[30, 15], zoom:map_start_zoom(), attributionControl:{compact:true}});
 map.addControl(new maplibregl.NavigationControl({visualizePitch:false}), 'top-right');
 const popup = new maplibregl.Popup({closeButton:false, closeOnClick:false, offset:8});
 const emptyFC = {type:'FeatureCollection', features:[]};
@@ -222,7 +225,7 @@ async function render() {
   $('dir-out').setAttribute('aria-pressed', state.dir === 'out'); $('dir-in').setAttribute('aria-pressed', state.dir === 'in');
   const isFlow = d?.kind === 'flow';
   $('dir-out').hidden = $('dir-in').hidden = !isFlow;
-  $('about').innerHTML = d ? (d.source_url ? '<a href="' + esc(d.source_url) + '" target="_blank" rel="noopener">' + esc(d.source_name) + '</a>' : esc(d.source_name)) + (d.about ? '. ' + esc(d.about) : '') : '';
+  $('about').innerHTML = d ? (d.source_url ? '<a href="' + esc(d.source_url) + '" target="_blank" rel="noopener">' + esc(d.source_name) + '</a>' : esc(d.source_name)) + (d.about ? '<details><summary>How it is counted</summary>' + esc(d.about) + '</details>' : '') : '';
   const body = $('body'); let html = '';
   // place
   placeInfo = state.place ? await api('place/' + state.place) : null;
@@ -234,7 +237,6 @@ async function render() {
   if (!d) { body.innerHTML = '<p class="note">No data loaded yet.</p>'; return; }
   const q = {source:d.source_id, measure:d.measure_id, year:state.year};
   const values = await paintMap();
-  if (placeInfo?.headline?.length) html += '<h2>' + esc(placeInfo.name) + ' in numbers</h2><div class="stats">' + placeInfo.headline.map(h => '<span>' + esc(h.name) + ', ' + h.year + '</span><span>' + fmt(h.value, h.unit) + '</span>').join('') + '</div>';
   if (isFlow) {
     const list = await api('partners', {...q, place:state.place, dir:state.dir, sector:state.sector});
     drawArcs(list, state.dir === 'out' ? css('--out') : css('--in'));
@@ -255,6 +257,7 @@ async function render() {
     const sizes = await api('sizes', {...q, kind:d.kind, place:state.place, dir:state.dir, parent:state.sector});
     if (sizes.length) html += '<h2>By sector, ' + state.year + '</h2>' + bars(sizes.map(s => ({id:s.id, label:s.name, value:s.value})), {unit:d.unit, click:'sector', cls:isFlow ? state.dir : ''});
   }
+  if (placeInfo?.headline?.length) html += '<h2>In numbers</h2><div class="stats">' + placeInfo.headline.map(h => '<span>' + esc(h.name) + ' ' + h.year + '</span><span>' + fmt(h.value, h.unit) + '</span>').join('') + '</div>';
   if (placeInfo) {
     if (placeInfo.entities.length) {
       html += '<h2>Organizations and sites</h2><div class="chips">' + placeInfo.entities.map(e => '<button class="chip" data-kind="' + esc(e.kind) + '">' + esc(KIND_NAMES[e.kind] || e.kind) + ' ' + e.n.toLocaleString() + '</button>').join('') + '</div><div id="entity-list"></div>';

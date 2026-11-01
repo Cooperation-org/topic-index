@@ -3,7 +3,7 @@ import csv
 import collections
 
 import kg
-from loaders._sector_helpers import num, Unmatched
+from loaders._sector_helpers import num, Unmatched, iso3_place
 
 PAGE = "https://ilostat.ilo.org/data/"
 API = "https://rplumber.ilo.org/data/indicator/?id=EMP_TEMP_SEX_ECO_NB_A&type=code&format=.csv&lang=en"
@@ -35,7 +35,7 @@ def main():
             rows[r["ref_area"]][(int(r["time"]), r["source"])][c] = v * 1000
     bad = Unmatched()
     for iso3, by in sorted(rows.items()):
-        place = l.country(iso3=iso3)
+        place = iso3_place(l, iso3)
         if not place:
             bad.add(iso3)
             continue

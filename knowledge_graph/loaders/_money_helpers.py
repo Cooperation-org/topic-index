@@ -8,9 +8,9 @@ import kg
 
 
 def fetch(url, headers=None, tries=4, timeout=300, raw=False):
-    """GET with retries and backoff; JSON by default."""
-    err = None
-    for i in range(tries):
+    """GET with retries and backoff; JSON by default. A 429 waits out the rate window and does not use up a try."""
+    err, i, waits = None, 0, 0
+    while i < tries:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": kg.UA, **(headers or {})})
             with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -20,9 +20,14 @@ def fetch(url, headers=None, tries=4, timeout=300, raw=False):
             if e.code in (400, 401, 403, 404):
                 raise
             err = e
+            if e.code == 429 and waits < 15:
+                waits += 1
+                time.sleep(65)
+                continue
         except Exception as e:  # network, timeout, bad json
             err = e
         time.sleep(2 ** i * 3)
+        i += 1
     raise err
 
 

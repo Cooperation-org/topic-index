@@ -1,6 +1,7 @@
 """WTO-OECD Balanced Trade in Services (BaTiS): bilateral services exports by EBOPS 2010 item, balanced series, annual."""
 import csv
 import json
+import time
 import urllib.error
 
 import kg
@@ -16,7 +17,8 @@ ABOUT = ("Services exported from the 'from' economy to the 'to' economy in the y
          "transport), so read one code or sum one level, never a prefix of S. Zero values are not stored.")
 
 
-def fetch(url, headers, dest, tries=2):
+def fetch(url, headers, dest, tries=6):
+    """OECD answers 429 when asked too fast: wait and retry. 404 means no data for that reporter."""
     for i in range(tries):
         try:
             return kg.download(url, dest, headers=headers)
@@ -24,8 +26,9 @@ def fetch(url, headers, dest, tries=2):
             if e.code == 404:
                 dest.write_text("")
                 return None
-            if i == tries - 1:
+            if e.code != 429 or i == tries - 1:
                 raise
+            time.sleep(60 * (i + 1))
 
 
 def main():
@@ -35,7 +38,7 @@ def main():
                   about="Bilateral services exports by economy pair and EBOPS 2010 service type, balanced series",
                   coverage="About 200 economies, annual, 2005 to latest year", access="open", license="OECD terms, https://www.oecd.org/en/about/terms-conditions.html", found_by="core")
     d = kg.workdir("services_trade")
-    struct = json.load(open(kg.download(DF % "dataflow" + "?references=all", d / "structure.json", headers=JSON)))["data"]
+    struct = json.load(open(kg.download("https://sdmx.oecd.org/public/rest/dataflow/OECD.SDD.TPS/DSD_BATIS@DF_BATIS/1.0?references=all", d / "structure.json", headers=JSON)))["data"]
     codelist = lambda n: {c["id"]: c for c in next(x for x in struct["codelists"] if x["id"] == n)["codes"]}
     items, areas = codelist("CL_BOP6_ITEM"), codelist("CL_AREA")
     sectors = {}
@@ -45,7 +48,7 @@ def main():
             sectors[code] = l.sector("ebops", code, items[code]["name"], parent=sectors.get(parent))
     m = l.measure("services_trade_usd", "Services trade, exporter to importer", "USD", "services_trade", ABOUT)
     l.conn.commit()
-    ac = json.load(open(kg.download(DF.replace("dataflow", "availableconstraint") + "/all/all/REF_AREA", d / "areas.json", headers=JSON)))
+    ac = json.load(open(kg.download(DF % "availableconstraint" + "/all/all/REF_AREA", d / "areas.json", headers=JSON)))
     reporters = [v["value"] for v in ac["data"]["dataConstraints"][0]["cubeRegions"][0]["keyValues"][0]["values"]]
     places, unmatched = {}, set()
 
@@ -61,6 +64,7 @@ def main():
     for rep in reporters:
         if rep in AGGREGATES or l.done(rep):
             continue
+        time.sleep(2)
         f = fetch("%s/%s..X.S..A.USD_EXC.B" % (DF % "data", rep), CSV, d / (rep + ".csv"))
         with l.part(rep):
             if f:

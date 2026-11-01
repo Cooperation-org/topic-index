@@ -1,4 +1,6 @@
 """World Bank International Debt Statistics: public and publicly guaranteed external debt stock, creditor to debtor."""
+import json
+
 import kg
 from loaders._money_helpers import Countries, fetch
 
@@ -46,13 +48,8 @@ def main():
     for iso3, pid in debtors:
         if l.done(iso3):
             continue
-        try:
-            doc = fetch("%scountry/%s/series/%s/counterpart-area/all/time/all?format=json&per_page=30000" % (API, iso3, SERIES))
-        except Exception as e:
-            if "400" in str(e) or "404" in str(e):
-                doc = None
-            else:
-                raise
+        body = fetch("%scountry/%s/series/%s/counterpart-area/all/time/all?format=json&per_page=30000" % (API, iso3, SERIES), raw=True)
+        doc = None if body.lstrip().startswith(b"<") else json.loads(body)  # XML error: not a reporting debtor
         with l.part(iso3):
             for x in (doc or {}).get("source", {}).get("data", []):
                 if x["value"] is None:
