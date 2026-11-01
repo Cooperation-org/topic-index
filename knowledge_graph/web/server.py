@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from fastapi import Cookie, FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import BadSignature, URLSafeSerializer
 from psycopg_pool import ConnectionPool
@@ -61,7 +61,7 @@ def datasets():
     return rows("""SELECT d.source_id, d.measure_id, d.kind, d.years, d.has_sector, s.slug AS source, s.name AS source_name, s.url AS source_url,
                           m.slug AS measure, m.name AS measure_name, m.unit, m.family, m.about
                    FROM kg.datasets d JOIN kg.sources s ON s.id = d.source_id JOIN kg.measures m ON m.id = d.measure_id
-                   ORDER BY m.family, m.name, s.name""")
+                   WHERE m.listed ORDER BY m.family, m.name, s.name""")
 
 
 @app.get("/api/countries")
@@ -69,32 +69,59 @@ def countries():
     return rows("SELECT id, iso3, name FROM kg.places WHERE kind = 'country'")
 
 
+def sector_cond(alias, source, measure, year, sector, table):
+    """Rows for one sector: its own published row if the source has one, else everything under it."""
+    exact = one(f"SELECT 1 AS y FROM kg.{table} WHERE source_id=%s AND measure_id=%s AND year=%s AND sector_id=%s LIMIT 1",
+                (source, measure, year, sector))
+    if exact:
+        return f"{alias}.sector_id = %(sector)s"
+    return f"""{alias}.sector_id IN (SELECT id FROM kg.sectors WHERE NOT aggregate AND path LIKE
+               (SELECT path FROM kg.sectors WHERE id = %(sector)s) || '/%%')"""
+
+
+def stat_total_cond(source, measure, year):
+    """A number per place when no sector is chosen: the published total, else the top level of the main scheme."""
+    if one("SELECT 1 AS y FROM kg.stats WHERE source_id=%s AND measure_id=%s AND year=%s AND sector_id IS NULL LIMIT 1",
+           (source, measure, year)):
+        return "st.sector_id IS NULL"
+    top = one("""SELECT s.scheme FROM kg.stats st JOIN kg.sectors s ON s.id = st.sector_id
+                 WHERE st.source_id=%s AND st.measure_id=%s AND st.year=%s AND NOT s.aggregate
+                 GROUP BY 1 ORDER BY count(*) DESC LIMIT 1""", (source, measure, year))
+    if not top:
+        return "false"
+    scheme = top["scheme"]
+    roots = one("""SELECT 1 AS y FROM kg.stats st JOIN kg.sectors s ON s.id = st.sector_id
+                   WHERE st.source_id=%s AND st.measure_id=%s AND st.year=%s AND s.scheme=%s AND s.path !~ '/.*/' AND NOT s.aggregate LIMIT 1""",
+                (source, measure, year, scheme))
+    depth = "AND path !~ '/.*/'" if roots else ""
+    return f"st.sector_id IN (SELECT id FROM kg.sectors WHERE scheme = '{scheme}' AND NOT aggregate {depth})"
+
+
 @app.get("/api/map")
 def map_values(source: int, measure: int, year: int, kind: str = "flow", dir: str = "out", sector: int | None = None):
     """Value per place, for shading the globe."""
     col = "from_place" if dir == "out" else "to_place"
+    params = {"source": source, "measure": measure, "year": year, "sector": sector}
+    place_cols = "p.id, p.code, p.iso3, p.name, p.kind, p.lat, p.lon"
     if kind == "stat":
-        cond = "st.sector_id IS NULL" if sector is None else \
-            "st.sector_id IN (SELECT id FROM kg.sectors WHERE path LIKE (SELECT path FROM kg.sectors WHERE id = %(sector)s) || '%%')"
-        if sector is None and not one("""SELECT 1 FROM kg.stats WHERE source_id=%s AND measure_id=%s AND year=%s AND sector_id IS NULL LIMIT 1""",
-                                      (source, measure, year)):
-            cond = "true"
-        sql = f"""SELECT p.id, p.code, p.iso3, p.name, p.kind, p.lat, p.lon, sum(st.value) AS value FROM kg.stats st
-                  JOIN kg.places p ON p.id = st.place_id
+        if sector is None:
+            cond = stat_total_cond(source, measure, year)
+        else:
+            cond = sector_cond("st", source, measure, year, sector, "stats")
+        total = "max(st.value)" if cond == "st.sector_id IS NULL" else "sum(st.value)"
+        sql = f"""SELECT {place_cols}, {total} AS value FROM kg.stats st JOIN kg.places p ON p.id = st.place_id
                   WHERE st.source_id=%(source)s AND st.measure_id=%(measure)s AND st.year=%(year)s AND {cond}
                   GROUP BY p.id ORDER BY value DESC"""
     elif sector is None:
-        sql = f"""SELECT p.id, p.code, p.iso3, p.name, p.kind, p.lat, p.lon, sum(f.value) AS value FROM kg.flow_pairs f
-                  JOIN kg.places p ON p.id = f.{col}
+        sql = f"""SELECT {place_cols}, sum(f.value) AS value FROM kg.flow_pairs f JOIN kg.places p ON p.id = f.{col}
                   WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s
                   GROUP BY p.id ORDER BY value DESC"""
     else:
-        sql = f"""SELECT p.id, p.code, p.iso3, p.name, p.kind, p.lat, p.lon, sum(f.value) AS value FROM kg.flows f
-                  JOIN kg.places p ON p.id = f.{col}
-                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s
-                    AND f.sector_id IN (SELECT id FROM kg.sectors WHERE path LIKE (SELECT path FROM kg.sectors WHERE id = %(sector)s) || '%%')
+        cond = sector_cond("f", source, measure, year, sector, "flow_sectors")
+        sql = f"""SELECT {place_cols}, sum(f.value) AS value FROM kg.flows f JOIN kg.places p ON p.id = f.{col}
+                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s AND {cond}
                   GROUP BY p.id ORDER BY value DESC"""
-    return rows(sql, {"source": source, "measure": measure, "year": year, "sector": sector})
+    return rows(sql, params)
 
 
 @app.get("/api/partners")
@@ -104,21 +131,20 @@ def partners(source: int, measure: int, year: int, place: int | None = None, dir
     ids = scope(place)
     a, b = ("from_place", "to_place") if dir == "out" else ("to_place", "from_place")
     table = "kg.flow_pairs" if sector is None else "kg.flows"
-    sector_cond = "" if sector is None else \
-        "AND f.sector_id IN (SELECT id FROM kg.sectors WHERE path LIKE (SELECT path FROM kg.sectors WHERE id = %(sector)s) || '%%')"
+    sector_filter = "" if sector is None else "AND " + sector_cond("f", source, measure, year, sector, "flow_sectors")
     params = {"source": source, "measure": measure, "year": year, "ids": ids, "sector": sector, "limit": min(limit, 100)}
     if ids is None:
         sql = f"""SELECT a.id AS a_id, a.name AS a_name, a.lat AS a_lat, a.lon AS a_lon, b.id AS b_id, b.name AS b_name,
                          b.lat AS b_lat, b.lon AS b_lon, b.code AS b_code, sum(f.value) AS value
                   FROM {table} f JOIN kg.places a ON a.id = f.{a} JOIN kg.places b ON b.id = f.{b}
-                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s {sector_cond}
+                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s {sector_filter}
                     AND a.id <> b.id AND a.kind NOT IN ('other', 'world') AND b.kind NOT IN ('other', 'world')
                   GROUP BY a.id, b.id ORDER BY value DESC LIMIT %(limit)s"""
     else:
         sql = f"""SELECT min(a.id) AS a_id, min(a.name) AS a_name, avg(a.lat) AS a_lat, avg(a.lon) AS a_lon, b.id AS b_id, b.name AS b_name,
                          b.lat AS b_lat, b.lon AS b_lon, b.code AS b_code, sum(f.value) AS value
                   FROM {table} f JOIN kg.places a ON a.id = f.{a} JOIN kg.places b ON b.id = f.{b}
-                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s {sector_cond}
+                  WHERE f.source_id=%(source)s AND f.measure_id=%(measure)s AND f.year=%(year)s {sector_filter}
                     AND f.{a} = ANY(%(ids)s) AND NOT f.{b} = ANY(%(ids)s) AND b.kind NOT IN ('other', 'world')
                   GROUP BY b.id ORDER BY value DESC LIMIT %(limit)s"""
     return rows(sql, params)
@@ -150,12 +176,19 @@ def sizes(source: int, measure: int, year: int, kind: str = "flow", place: int |
         col = "from_place" if dir == "out" else "to_place"
         base = f"""SELECT sector_id, value FROM kg.flows WHERE source_id=%(source)s AND measure_id=%(measure)s AND year=%(year)s
                    AND {col} = ANY(%(ids)s) AND sector_id IS NOT NULL"""
-    return rows(f"""WITH b AS ({base}),
-                    r AS (SELECT array_to_string((string_to_array(s.path, '/'))[1:%(depth)s], '/') AS p, sum(b.value) AS value
-                          FROM b JOIN kg.sectors s ON s.id = b.sector_id WHERE s.path LIKE %(prefix)s GROUP BY 1)
-                    SELECT s.id, s.code, s.name, s.scheme, r.value,
-                           EXISTS (SELECT 1 FROM kg.sectors c WHERE c.parent_id = s.id) AS has_children
-                    FROM r JOIN kg.sectors s ON s.path = r.p ORDER BY r.value DESC LIMIT %(limit)s""", params)
+    found = rows(f"""WITH b AS ({base}),
+                     j AS (SELECT s.scheme, s.path, b.value FROM b JOIN kg.sectors s ON s.id = b.sector_id
+                           WHERE s.path LIKE %(prefix)s AND NOT s.aggregate),
+                     main AS (SELECT scheme FROM j GROUP BY 1 ORDER BY count(*) DESC LIMIT 1),
+                     r AS (SELECT array_to_string((string_to_array(path, '/'))[1:%(depth)s], '/') AS p,
+                                  COALESCE(sum(value) FILTER (WHERE cardinality(string_to_array(path, '/')) = %(depth)s), sum(value)) AS value
+                           FROM j WHERE scheme = (SELECT scheme FROM main) GROUP BY 1)
+                     SELECT s.id, s.code, s.name, s.scheme, r.value,
+                            EXISTS (SELECT 1 FROM kg.sectors c WHERE c.parent_id = s.id) AS has_children
+                     FROM r JOIN kg.sectors s ON s.path = r.p ORDER BY r.value DESC LIMIT %(limit)s""", params)
+    if parent is None and len(found) == 1 and found[0]["has_children"]:  # a lone root says nothing: show what is under it
+        return sizes(source, measure, year, kind, place, dir, found[0]["id"], limit)
+    return found
 
 
 @app.get("/api/datasets_for_scheme")
@@ -295,11 +328,24 @@ def ask(body: Ask, money_map: str | None = Cookie(default=None)):
         raise HTTPException(401, "sign in to ask")
     if one("SELECT count(*) AS n FROM kg_app.asks WHERE asked_at > now() - interval '1 day'")["n"] >= DAILY_ASKS:
         raise HTTPException(429, "daily limit of %d questions reached" % DAILY_ASKS)
-    out = agent.ask(body.question[:4000], body.history[-6:])
-    one("""INSERT INTO kg_app.asks (asked_by, question, answer, tool_calls, tokens_in, tokens_out)
-           VALUES ('team', %s, %s, %s, %s, %s) RETURNING id""",
-        (body.question[:4000], out["answer"], json.dumps(out["tools"]), out["tokens_in"], out["tokens_out"]))
-    return JSONResponse({"answer": out["answer"], "map": out["map"]})
+    question = body.question[:4000]
+
+    def events():
+        answer = ""
+        try:
+            for e in agent.ask(question, body.history[-6:]):
+                if e["type"] == "answer":
+                    answer = e["text"]
+                if e["type"] == "usage":
+                    one("""INSERT INTO kg_app.asks (asked_by, question, answer, tool_calls, tokens_in, tokens_out)
+                           VALUES ('team', %s, %s, %s, %s, %s) RETURNING id""",
+                        (question, answer, json.dumps(e["tools"]), e["tokens_in"], e["tokens_out"]))
+                    continue
+                yield json.dumps(e) + "\n"
+        except Exception as err:
+            yield json.dumps({"type": "answer", "text": "Failed: %s" % str(err)[:300]}) + "\n"
+
+    return StreamingResponse(events(), media_type="application/x-ndjson", headers={"X-Accel-Buffering": "no"})
 
 
 @app.get("/health")

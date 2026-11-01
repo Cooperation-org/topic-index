@@ -17,9 +17,9 @@ SYSTEM = """You answer questions about how money, goods and influence move in th
 
 Database (Postgres, schemas kg, kg_raw, public):
 - kg.places(id, code, name, kind world|region|country|admin1|admin2|city|other, parent_id, iso2, iso3, m49, lat, lon, population, alt_names). Codes: PAK, US.AZ, PK.02, gn:184745, region:asia, world.
-- kg.sectors(id, scheme, code, name, parent_id, path). Each classification has its own tree: hs (customs goods: section/2/4/6 digit), isic, naics, fao, sctg, energy_tech, dac_purpose and more. Roll up by path prefix: s.path LIKE parent.path || '%'. Find a product by searching names across schemes.
+- kg.sectors(id, scheme, code, name, parent_id, path). Each classification has its own tree: hs (customs goods: section/2/4/6 digit), isic, naics, fao, sctg, energy_tech, dac_purpose and more. Roll up by path prefix: s.path LIKE parent.path || '%', leaving out aggregate = true rows (a publisher's own sums). Some sources publish every level of a tree: read measures.about and take one level, never parents plus children. Find a product by searching names across schemes.
 - kg.measures(id, slug, name, unit, family, about). about says what from and to mean. Read it before stating direction.
-- kg.flows(source_id, measure_id, year, from_place, to_place, sector_id, value): place to place. kg.stats(source_id, measure_id, year, place_id, sector_id, value): a number about a place. Two sources can use one measure for overlapping years, so always group or filter by source_id. Never add sector rows to a NULL-sector total of the same source.
+- kg.flows(source_id, measure_id, year, from_place, to_place, sector_id, value): place to place. kg.stats(source_id, measure_id, year, place_id, sector_id, value): a number about a place. Two sources can use one measure for overlapping years, so always group or filter by source_id. A row with NULL sector is the published total: never add it to sector rows.
 - kg.flow_pairs(source_id, measure_id, year, from_place, to_place, value): flows summed per pair, fast. kg.flow_sectors: world totals per sector. kg.datasets(source_id, measure_id, kind, min_year, max_year, years): what exists.
 - kg.entities(id, source_id, ext_id, name, kind company|government|ngo|power_plant|port|mine|factory|lobbyist..., place_id, lat, lon, sector_id, url, attrs jsonb). kg.links(source_id, kind, from_entity, to_entity, to_place, sector_id, year, value, unit, attrs): owns, parents, contracts, lobbying.
 - kg.sources(id, slug, name, publisher, url, data_url, about, kinds, coverage, access, license, status listed|loaded|failed|skipped, status_note): the catalog, including sources not loaded. kg_raw.<slug>: tables pulled ad hoc, all text columns.
@@ -172,35 +172,64 @@ def call_tool(name, args, shown):
         return {"error": "%s: %s" % (type(e).__name__, str(e)[:500])}
 
 
+def describe(name, args):
+    """A step as a person reads it."""
+    return {"sql": lambda: "Database query",
+            "search_pages": lambda: "Stored pages: " + args.get("query", ""),
+            "web_search": lambda: "Web search: " + args.get("query", ""),
+            "pull_dataset": lambda: "Pulling table: " + args.get("name", ""),
+            "add_source": lambda: "Listing source: " + args.get("name", ""),
+            "show_on_map": lambda: "Updating the globe"}.get(name, lambda: name)()
+
+
+def outcome(out):
+    if "error" in out:
+        return "error: " + out["error"][:160]
+    for key, unit in (("rows", "rows"), ("pages", "pages"), ("results", "results")):
+        if isinstance(out.get(key), list):
+            return "%d %s" % (len(out[key]), unit)
+    if isinstance(out.get("rows"), int):
+        return "%d rows stored" % out["rows"]
+    return ""
+
+
 def ask(question, history=()):
-    """Returns {answer, map, tools, tokens_in, tokens_out}. history is earlier (question, answer) text pairs."""
+    """Yields events as they happen: step, step_done, text, map, answer, usage."""
     messages = []
     for q, a in history:
         messages += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
     messages.append({"role": "user", "content": question})
-    shown, calls, tin, tout = {}, [], 0, 0
+    shown, calls, tin, tout, text = {}, [], 0, 0, ""
     for round_no in range(MAX_ROUNDS):
         final = {"tool_choice": {"type": "none"}} if round_no == MAX_ROUNDS - 1 else {}  # the last round must answer
-        resp = client.beta.messages.create(
-            model=MODEL, max_tokens=16000, betas=["server-side-fallback-2026-07-01"], fallbacks="default",
-            output_config={"effort": "medium"}, cache_control={"type": "ephemeral"},
-            system=SYSTEM, tools=TOOLS, messages=messages, **final)
+        with client.beta.messages.stream(
+                model=MODEL, max_tokens=16000, betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+                output_config={"effort": "medium"}, cache_control={"type": "ephemeral"},
+                system=SYSTEM, tools=TOOLS, messages=messages, **final) as stream:
+            for chunk in stream.text_stream:
+                yield {"type": "text", "text": chunk}
+            resp = stream.get_final_message()
         tin += resp.usage.input_tokens + (resp.usage.cache_read_input_tokens or 0) + (resp.usage.cache_creation_input_tokens or 0)
         tout += resp.usage.output_tokens
         if resp.stop_reason == "refusal":
-            return {"answer": "Declined by the model's safety system. Rephrase to continue.", "map": shown, "tools": calls,
-                    "tokens_in": tin, "tokens_out": tout}
+            text = "Declined by the model's safety system."
+            break
         messages.append({"role": "assistant", "content": resp.content})
         if resp.stop_reason != "tool_use":
             text = "\n".join(b.text for b in resp.content if b.type == "text")
-            return {"answer": text, "map": shown, "tools": calls, "tokens_in": tin, "tokens_out": tout}
+            break
         results = []
         for b in resp.content:
             if b.type == "tool_use":
                 calls.append({"tool": b.name, "input": b.input})
+                yield {"type": "step", "id": b.id, "label": describe(b.name, b.input),
+                       "detail": b.input.get("query") if b.name == "sql" else None}
                 out = call_tool(b.name, b.input, shown)
+                yield {"type": "step_done", "id": b.id, "result": outcome(out)}
+                if b.name == "show_on_map":
+                    yield {"type": "map", "map": shown}
                 results.append({"type": "tool_result", "tool_use_id": b.id,
                                 "content": json.dumps(out, default=str)[:30000]})
         messages.append({"role": "user", "content": results})
-    return {"answer": "Stopped after %d steps without a final answer." % MAX_ROUNDS, "map": shown, "tools": calls,
-            "tokens_in": tin, "tokens_out": tout}
+    yield {"type": "answer", "text": text or "No answer after %d steps." % MAX_ROUNDS}
+    yield {"type": "usage", "tools": calls, "tokens_in": tin, "tokens_out": tout}

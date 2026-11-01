@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS kg.sectors (
 CREATE INDEX IF NOT EXISTS sectors_name_trgm ON kg.sectors USING gin (name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS sectors_path ON kg.sectors (path text_pattern_ops);
 
+ALTER TABLE kg.sectors ADD COLUMN IF NOT EXISTS aggregate boolean NOT NULL DEFAULT false;  -- a published sum of other rows in its scheme
+
 CREATE TABLE IF NOT EXISTS kg.measures (
     id     smallserial PRIMARY KEY,
     slug   text UNIQUE NOT NULL,          -- goods_exports_usd, fdi_position_usd, gdp_usd
@@ -66,6 +68,8 @@ CREATE TABLE IF NOT EXISTS kg.measures (
     family text NOT NULL,                 -- goods_trade, services_trade, investment, banking, aid, remittances, arms, migration, freight, output, employment, production, energy, waste, ...
     about  text                           -- what "from" and "to" mean for a flow, and how it was counted
 );
+
+ALTER TABLE kg.measures ADD COLUMN IF NOT EXISTS listed boolean NOT NULL DEFAULT true;  -- offered as a filter on the page
 
 CREATE TABLE IF NOT EXISTS kg.flows (
     source_id  smallint NOT NULL REFERENCES kg.sources(id),

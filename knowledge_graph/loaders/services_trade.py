@@ -10,12 +10,12 @@ from loaders import _trade_helpers as h
 DF = "https://sdmx.oecd.org/public/rest/%s/OECD.SDD.TPS,DSD_BATIS@DF_BATIS,1.0"
 JSON = {"Accept": "application/vnd.sdmx.structure+json"}
 CSV = {"Accept": "application/vnd.sdmx.data+csv; charset=utf-8"}
-AGGREGATES = {"W", "OECD", "EU27_2020"}  # world and country groups: kept out so sums by place do not double count
+AGGREGATES = {"W", "OECD", "EU27_2020", "WXOECD", "WXEU27_2020"}  # world and country groups: kept out so sums by place do not double count
 MEMO = ("SOX", "SPX", "S5")  # overlapping memo groupings, not part of the EBOPS tree
 ABOUT = ("Services exported from the 'from' economy to the 'to' economy in the year, USD, from the WTO-OECD balanced series "
          "(exports and imports reported by the two economies reconciled into one figure). Every EBOPS level is stored as "
          "published: S is total services and already includes the groups below it (SC transport) and their items (SC1 sea "
-         "transport), so read one code or sum one level, never a prefix of S. Zero values are not stored.")
+         "transport), so read one code or sum one level, never a prefix of S. Zero values are not stored. Place batis:WXD is the source's \"Rest of the world\" partner.")
 
 
 def fetch(url, headers, dest, tries=12):

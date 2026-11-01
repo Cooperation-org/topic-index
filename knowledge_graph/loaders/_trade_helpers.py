@@ -7,10 +7,11 @@ import kg
 
 BACI = "https://www.cepii.fr/DATA_DOWNLOAD/baci/data/BACI_%s_V202601.zip"
 BACI_PAGE = "https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=37"
+OTHER_ASIA = "490"  # the UN's name for Taiwan in trade data
 HISTORIC = re.compile(r"\(\.\.\.\d{4}\)")
 GOODS_ABOUT = ("Goods exported from the 'from' place to the 'to' place in the year, USD, free on board (CEPII reconciles "
-               "exporter and importer reports and removes freight from import values). Taiwan is not reported separately "
-               "by the UN; its trade sits in place baci:490 (Other Asia, nes).")
+               "exporter and importer reports and removes freight from import values). BACI's 'Other Asia, nes' is Taiwan, "
+               "stored as Taiwan.")
 
 
 def goods_measure(l):
@@ -28,6 +29,9 @@ def baci_places(l, zip_path):
     out = {}
     for r in kg.zip_csv(zip_path, "country_codes_V202601.csv"):
         code, name = r["country_code"], r["country_name"]
+        if code == OTHER_ASIA:
+            out[code] = l.country(iso3="TWN")
+            continue
         pid = None if HISTORIC.search(name) else l.country(iso3=r["country_iso3"])
         if not pid and HISTORIC.search(name):
             pid = l.place("m49:" + code)

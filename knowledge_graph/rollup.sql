@@ -18,16 +18,27 @@ CREATE SCHEMA IF NOT EXISTS kg_raw;   -- tables pulled ad hoc, one per source, a
 GRANT USAGE ON SCHEMA kg_raw TO topic_index_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA kg_raw GRANT SELECT ON TABLES TO topic_index_user;
 
+-- A published total is a row with no sector, so it never adds to its own parts.
+UPDATE kg.stats SET sector_id = NULL WHERE sector_id IN (SELECT id FROM kg.sectors WHERE upper(code) = 'TOTAL');
+UPDATE kg.flows SET sector_id = NULL WHERE sector_id IN (SELECT id FROM kg.sectors WHERE upper(code) = 'TOTAL' OR (scheme = 'ebops' AND code = 'S'));
+-- FAOSTAT item codes from 1700 are its own groupings of other items.
+UPDATE kg.sectors SET aggregate = true WHERE scheme = 'fao' AND code ~ '^[0-9]+$' AND code::int >= 1700 AND NOT aggregate;
+-- USDA publishes hundreds of measures; the page offers the ones that say how big a crop is.
+UPDATE kg.measures SET listed = false WHERE slug LIKE 'nass\_%' AND listed
+   AND slug NOT IN ('nass_production_usd', 'nass_sales_usd', 'nass_area_harvested_acres', 'nass_production_480_lb_bales');
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS kg.flow_pairs AS
 SELECT source_id, measure_id, year, from_place, to_place,
        COALESCE(sum(value) FILTER (WHERE sector_id IS NULL), sum(value)) AS value
-FROM kg.flows GROUP BY 1, 2, 3, 4, 5 WITH NO DATA;
+FROM kg.flows WHERE sector_id IS NULL OR sector_id NOT IN (SELECT id FROM kg.sectors WHERE aggregate)
+GROUP BY 1, 2, 3, 4, 5 WITH NO DATA;
 CREATE UNIQUE INDEX IF NOT EXISTS flow_pairs_key ON kg.flow_pairs (source_id, measure_id, year, from_place, to_place);
 CREATE INDEX IF NOT EXISTS flow_pairs_to ON kg.flow_pairs (source_id, measure_id, year, to_place);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS kg.flow_sectors AS
 SELECT source_id, measure_id, year, sector_id, sum(value) AS value
-FROM kg.flows WHERE sector_id IS NOT NULL GROUP BY 1, 2, 3, 4 WITH NO DATA;
+FROM kg.flows WHERE sector_id IS NOT NULL AND sector_id NOT IN (SELECT id FROM kg.sectors WHERE aggregate)
+GROUP BY 1, 2, 3, 4 WITH NO DATA;
 CREATE UNIQUE INDEX IF NOT EXISTS flow_sectors_key ON kg.flow_sectors (source_id, measure_id, year, sector_id);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS kg.datasets AS
