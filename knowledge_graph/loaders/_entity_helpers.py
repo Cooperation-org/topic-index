@@ -87,7 +87,9 @@ ALIASES = {
     "south georgia and south sandwich islands": "south georgia and the south sandwich islands", "svalbard": "svalbard and jan mayen",
     "saint helena, ascension, and tristan da cunha": "saint helena, ascension and tristan da cunha",
     "falkland islands (islas malvinas)": "falkland islands (malvinas)", "saint barthelemy": "saint barthélemy",
-    "cocos islands": "cocos (keeling) islands", "st. helena": "saint helena, ascension and tristan da cunha",
+    "bosnia-herzegovina": "bosnia and herzegovina", "palestine (*)": "palestine, state of",
+    "congo, democratic republic of": "congo, democratic republic of the", "laos, people's democratic republic": "lao people's democratic republic",
+    "russia, federation of": "russian federation", "cocos islands": "cocos (keeling) islands", "st. helena": "saint helena, ascension and tristan da cunha",
 }
 
 
@@ -126,3 +128,34 @@ class Names:
         if self.missing:
             top = sorted(self.missing.items(), key=lambda kv: -kv[1])[:15]
             print("unmatched country names:", top, flush=True)
+
+
+def add_links(l, rows):
+    """Append links. rows: (kind, from_ext_id, to_ext_id, sector_id, year, value, unit, attrs dict or None).
+    Both ends are entities of this source; unresolved rows are dropped. Returns stored count."""
+    cur = l.cur
+    cur.execute("""CREATE TEMP TABLE IF NOT EXISTS kg_in_links2 (kind text, f text, t text, sector int, year smallint,
+                   value float8, unit text, attrs text)""")
+    cur.execute("TRUNCATE kg_in_links2")
+    with cur.copy("COPY kg_in_links2 FROM STDIN") as c:
+        for kind, f, t, sector, year, value, unit, attrs in rows:
+            c.write_row((kind, str(f), str(t), sector, year, value, unit, json.dumps(attrs, ensure_ascii=False) if attrs else None))
+    cur.execute("""INSERT INTO kg.links (source_id, kind, from_entity, to_entity, sector_id, year, value, unit, attrs)
+                   SELECT %s, i.kind, a.id, b.id, i.sector, i.year, i.value, i.unit, i.attrs::jsonb
+                   FROM kg_in_links2 i JOIN kg.entities a ON a.source_id = %s AND a.ext_id = i.f
+                                       JOIN kg.entities b ON b.source_id = %s AND b.ext_id = i.t""",
+                (l.source_id, l.source_id, l.source_id))
+    l.written += cur.rowcount
+    return cur.rowcount
+
+
+def list_only(slug, note, **fields):
+    """Catalog row for a source that is not loaded: access is set, status stays listed, the note says why."""
+    import kg
+    conn = kg.connect()
+    cur = conn.cursor()
+    sid = kg.add_source(cur, slug, **fields)
+    cur.execute("UPDATE kg.sources SET status_note = %s WHERE id = %s AND status = 'listed'", (note, sid))
+    conn.commit()
+    conn.close()
+    print("%s  listed  %s" % (slug, note), flush=True)

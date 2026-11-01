@@ -35,7 +35,7 @@ def main():
                 continue
             row = next(csv.reader([line]))
             period = row[15]
-            if not period.endswith("-Q4") or not row[16]:
+            if not period.endswith("-Q4") or row[16] in ("", "NaN"):
                 continue
             # parent country all, all institution types, cross-border position
             if code(row[9]) != "5J" or code(row[10]) != "A" or code(row[14]) != "N":

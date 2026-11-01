@@ -5,6 +5,7 @@ import time
 import urllib.error
 
 import kg
+from loaders import _trade_helpers as h
 
 DF = "https://sdmx.oecd.org/public/rest/%s/OECD.SDD.TPS,DSD_BATIS@DF_BATIS,1.0"
 JSON = {"Accept": "application/vnd.sdmx.structure+json"}
@@ -17,7 +18,7 @@ ABOUT = ("Services exported from the 'from' economy to the 'to' economy in the y
          "transport), so read one code or sum one level, never a prefix of S. Zero values are not stored.")
 
 
-def fetch(url, headers, dest, tries=6):
+def fetch(url, headers, dest, tries=12):
     """OECD answers 429 when asked too fast: wait and retry. 404 means no data for that reporter."""
     for i in range(tries):
         try:
@@ -28,7 +29,7 @@ def fetch(url, headers, dest, tries=6):
                 return None
             if e.code != 429 or i == tries - 1:
                 raise
-            time.sleep(60 * (i + 1))
+            time.sleep(300)
 
 
 def main():
@@ -48,8 +49,9 @@ def main():
             sectors[code] = l.sector("ebops", code, items[code]["name"], parent=sectors.get(parent))
     m = l.measure("services_trade_usd", "Services trade, exporter to importer", "USD", "services_trade", ABOUT)
     l.conn.commit()
-    ac = json.load(open(kg.download(DF % "availableconstraint" + "/all/all/REF_AREA", d / "areas.json", headers=JSON)))
-    reporters = [v["value"] for v in ac["data"]["dataConstraints"][0]["cubeRegions"][0]["keyValues"][0]["values"]]
+    ac = json.load(open(kg.download(DF % "availableconstraint" + "/all/all/TIME_PERIOD", d / "years.json", headers=JSON)))
+    span = ac["data"]["dataConstraints"][0]["cubeRegions"][0]["keyValues"][0]["timeRange"]
+    years = range(int(span["startPeriod"]["period"][:4]), int(span["endPeriod"]["period"][:4]) + 1)
     places, unmatched = {}, set()
 
     def place(code):
@@ -61,18 +63,20 @@ def main():
             places[code] = pid
         return places[code]
 
-    for rep in reporters:
-        if rep in AGGREGATES or l.done(rep):
+    # one request per year (all economies): the OECD API allows few requests per hour
+    for year in years:
+        if l.done(str(year)):
             continue
         time.sleep(2)
-        f = fetch("%s/%s..X.S..A.USD_EXC.B" % (DF % "data", rep), CSV, d / (rep + ".csv"))
-        with l.part(rep):
-            if f:
-                l.cur.execute("DELETE FROM kg.flows WHERE source_id = %s AND from_place = %s", (l.source_id, place(rep)))
-                for r in csv.DictReader(open(f, encoding="utf-8")):
-                    sid, to, v = sectors.get(r["SERVICE"]), place(r["COUNTERPART_AREA"]), float(r["OBS_VALUE"] or 0) * 10 ** int(r["UNIT_MULT"] or 0)
-                    if sid and to and v > 0:
-                        l.flow(m, int(r["TIME_PERIOD"]), place(rep), to, sid, v)
+        f = fetch("%s/..X.S..A.USD_EXC.B?startPeriod=%d&endPeriod=%d" % (DF % "data", year, year), CSV, d / ("%d.csv" % year))
+        h.clear_year(l, year)
+        with l.part(str(year)):
+            for r in csv.DictReader(open(f, encoding="utf-8")) if f else ():
+                sid, src, to = sectors.get(r["SERVICE"]), place(r["REF_AREA"]), place(r["COUNTERPART_AREA"])
+                v = float(r["OBS_VALUE"] or 0) * 10 ** int(r["UNIT_MULT"] or 0)
+                if sid and src and to and v > 0:
+                    l.flow(m, year, src, to, sid, v)
+        (d / ("%d.csv" % year)).unlink(missing_ok=True)
     print("non-country places used:", sorted(unmatched))
     l.finish()
     kg.cleanup("services_trade")

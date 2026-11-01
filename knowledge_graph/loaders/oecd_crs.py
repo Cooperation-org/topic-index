@@ -12,8 +12,9 @@ BASE = "https://sdmx.oecd.org/dcd-public/rest/"
 DATAFLOW = "OECD.DCD.FSD,DSD_CRS@DF_CRS,1.7"
 # DONOR.RECIPIENT.SECTOR.MEASURE.CHANNEL.MODALITY.FLOW_TYPE.PRICE_BASE.MD_DIM.MD_ID.UNIT_MEASURE
 # measure 100 = ODA, aggregate (not project) rows, current prices, USD millions
-KEY = ".%s..100._T._T.D+C.V._T..USD"
+KEY = ".%s.%s.100._T._T.D+C.V._T..USD"
 FIRST_YEAR = 2010
+BATCH = 8
 LEAF_DONOR = re.compile(r"^\d[A-Z]{2,4}\d{2,3}$")  # 1UN014, 4EU001, 5WB002: one agency, not a group
 
 
@@ -41,36 +42,41 @@ def main():
             sec_ids[code] = l.sector("dac_purpose", code, name, parent=sector(parent) if parent in sectors and parent not in ("_T", "1000") else None)
         return sec_ids[code]
 
-    recips = [(p, p) for p in sorted({c for c in areas if len(c) == 3 and c.isalpha() and l.country(iso3=c)})]
-    recips += [(c, c) for c in sorted(areas) if c.endswith("_X")]
-    for code, _ in recips:
-        if l.done(code):
-            continue
-        time.sleep(3)
+    recips = sorted({c for c in areas if len(c) == 3 and c.isalpha() and l.country(iso3=c)}) + sorted(c for c in areas if c.endswith("_X"))
+    purposes = "+".join(sorted(c for c in sectors if len(c) == 5 and c.isdigit()))
+    todo = [c for c in recips if not l.done(c)]
+    # few, large requests: the API sits behind a bot challenge that answers 429 after a burst
+    for i in range(0, len(todo), BATCH):
+        group = todo[i:i + BATCH]
+        time.sleep(5)
         try:
-            body = fetch("%sdata/%s/%s?startPeriod=%d" % (BASE, DATAFLOW, KEY % code, FIRST_YEAR),
-                         headers={"Accept": "application/vnd.sdmx.data+csv;version=1.0.0"}, raw=True)
+            body = fetch("%sdata/%s/%s?startPeriod=%d" % (BASE, DATAFLOW, KEY % ("+".join(group), purposes), FIRST_YEAR),
+                         headers={"Accept": "application/vnd.sdmx.data+csv;version=1.0.0"}, raw=True, tries=3)
         except urllib.error.HTTPError as e:
             if e.code != 404:
+                l.fail("OECD API blocked: HTTP %d after %d recipients stored (Cloudflare challenge); rerun to resume" % (e.code, len(recips) - len(todo) + i))
                 raise
             body = b""
-        with l.part(code):
-            to = l.country(iso3=code) or l.other_place("oecd:" + code, areas[code][0])
-            agg = {}
-            for r in csv.DictReader(io.StringIO(body.decode("utf-8"))):
-                s = r["SECTOR"]
-                if not (len(s) == 5 and s.isdigit()) or s not in sectors or not r["OBS_VALUE"]:
-                    continue
-                donor = r["DONOR"]
-                frm = l.country(iso3=donor) if len(donor) == 3 else None
-                if not frm and LEAF_DONOR.match(donor) and donor in areas:
-                    frm = l.other_place("oecd:" + donor, areas[donor][0])
-                if not frm:
-                    continue
-                k = (frm, int(r["TIME_PERIOD"]), r["FLOW_TYPE"], s)
-                agg[k] = agg.get(k, 0) + float(r["OBS_VALUE"]) * 1e6
-            for (frm, year, flow, s), v in agg.items():
-                l.flow(disb if flow == "D" else comm, year, frm, to, sector(s), v)
+        rows = {c: [] for c in group}
+        for r in csv.DictReader(io.StringIO(body.decode("utf-8"))):
+            if r["RECIPIENT"] in rows and r["OBS_VALUE"]:
+                rows[r["RECIPIENT"]].append(r)
+        for code in group:
+            with l.part(code):
+                to = l.country(iso3=code) or l.other_place("oecd:" + code, areas[code][0])
+                agg = {}
+                for r in rows[code]:
+                    s = r["SECTOR"]
+                    donor = r["DONOR"]
+                    frm = l.country(iso3=donor) if len(donor) == 3 else None
+                    if not frm and LEAF_DONOR.match(donor) and donor in areas:
+                        frm = l.other_place("oecd:" + donor, areas[donor][0])
+                    if not frm:
+                        continue
+                    k = (frm, int(r["TIME_PERIOD"]), r["FLOW_TYPE"], s)
+                    agg[k] = agg.get(k, 0) + float(r["OBS_VALUE"]) * 1e6
+                for (frm, year, flow, s), v in agg.items():
+                    l.flow(disb if flow == "D" else comm, year, frm, to, sector(s), v)
     l.finish()
     kg.cleanup("oecd_crs")
 

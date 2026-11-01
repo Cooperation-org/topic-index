@@ -129,3 +129,44 @@ def waste_sector(l, code):
              "treatment-other-treatment": "Other treatment"}
     name = names.get(code) or code.split("-", 1)[-1].replace("-", " ").capitalize()
     return l.sector("waste", code, name, waste_sector(l, parent) if parent else None)
+
+
+def norm_name(s):
+    """Name for matching places: lower case, letters and digits only, without county/state/province words."""
+    import re
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    s = re.sub(r"\b(county|city|state|province|region|division|area)\b", " ", s)
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def admin_lookup(l, iso2, kind="admin1"):
+    """normalized name or alt name -> place id, for the first or second level divisions of one country."""
+    l.cur.execute("SELECT id, name, alt_names FROM kg.places WHERE iso2 = %s AND kind = %s ORDER BY id", (iso2, kind))
+    out = {}
+    for id_, name, alts in l.cur.fetchall():
+        for n in [name] + list(alts or []):
+            out.setdefault(norm_name(n), id_)
+        out[norm_name(name)] = id_
+    return out
+
+
+def download_via_intermediate(url, dest, cert_urls):
+    """Download from a server that does not send its intermediate certificates. The missing certificates are
+    fetched over verified HTTPS from the CA's own site and added to the trust store for this one request;
+    the chain still has to end at a root already trusted by the system."""
+    import shutil
+    import ssl
+    import urllib.request
+    from pathlib import Path
+    dest = Path(dest)
+    if dest.exists() and dest.stat().st_size:
+        return dest
+    ctx = ssl.create_default_context()
+    for u in cert_urls:
+        ctx.load_verify_locations(cadata=urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": kg.UA}), timeout=60).read().decode())
+    tmp = dest.with_name(dest.name + ".part")
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=600, context=ctx) as r, open(tmp, "wb") as out:
+        shutil.copyfileobj(r, out, 1 << 20)
+    tmp.rename(dest)
+    return dest
