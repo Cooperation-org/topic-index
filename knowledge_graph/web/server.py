@@ -186,6 +186,7 @@ def place(place_id: int):
     p["datasets"] = [r["k"] for r in rows("""SELECT source_id || ':' || measure_id || ':' || kind AS k FROM kg.place_datasets WHERE place_id = %s""", (place_id,))]
     p["entities"] = rows("""SELECT kind, count(*) AS n FROM kg.entities e
                             WHERE e.place_id = %(p)s OR e.place_id IN (SELECT id FROM kg.places WHERE parent_id = %(p)s)
+                               OR e.place_id IN (SELECT place_id FROM kg.place_country WHERE country_id = %(p)s)
                             GROUP BY kind ORDER BY n DESC""", {"p": place_id})
     return p
 
@@ -193,7 +194,8 @@ def place(place_id: int):
 @app.get("/api/place/{place_id}/entities")
 def place_entities(place_id: int, kind: str | None = None, q: str | None = None, limit: int = 50):
     return rows("""SELECT e.id, e.name, e.kind, e.url, e.lat, e.lon, s.slug AS source FROM kg.entities e JOIN kg.sources s ON s.id = e.source_id
-                   WHERE (e.place_id = %(p)s OR e.place_id IN (SELECT id FROM kg.places WHERE parent_id = %(p)s))
+                   WHERE (e.place_id = %(p)s OR e.place_id IN (SELECT id FROM kg.places WHERE parent_id = %(p)s)
+                          OR e.place_id IN (SELECT place_id FROM kg.place_country WHERE country_id = %(p)s))
                      AND (%(kind)s::text IS NULL OR e.kind = %(kind)s) AND (%(q)s::text IS NULL OR e.name ILIKE %(q)s)
                    ORDER BY e.name LIMIT %(limit)s""",
                 {"p": place_id, "kind": kind, "q": "%%%s%%" % q if q else None, "limit": min(limit, 200)})
@@ -202,10 +204,16 @@ def place_entities(place_id: int, kind: str | None = None, q: str | None = None,
 @app.get("/api/place/{place_id}/owners")
 def place_owners(place_id: int, limit: int = 25):
     """Who owns the companies registered here, from outside the country."""
-    return rows("""SELECT par.name AS parent, pp.name AS country, pp.id AS country_id, count(*) AS children
-                   FROM kg.entities e JOIN kg.links l ON l.from_entity = e.id AND l.kind IN ('ultimate_parent', 'owned_by')
-                   JOIN kg.entities par ON par.id = l.to_entity JOIN kg.places pp ON pp.id = par.place_id
-                   WHERE e.place_id = %(p)s AND par.place_id <> %(p)s
+    return rows("""SELECT par.name AS parent, c.name AS country, c.id AS country_id, count(*) AS children
+                   FROM kg.place_country here
+                   JOIN kg.entities e ON e.place_id = here.place_id
+                   JOIN kg.links l ON l.from_entity = e.id AND l.kind IN ('ultimate_parent', 'owned_by')
+                   JOIN kg.entities par ON par.id = l.to_entity
+                   JOIN kg.place_country pc ON pc.place_id = par.place_id
+                   JOIN kg.places c ON c.id = pc.country_id
+                   WHERE pc.country_id <> here.country_id
+                     AND (here.country_id = %(p)s OR here.place_id = %(p)s
+                          OR here.place_id IN (SELECT id FROM kg.places WHERE parent_id = %(p)s))
                    GROUP BY 1, 2, 3 ORDER BY children DESC LIMIT %(limit)s""", {"p": place_id, "limit": min(limit, 100)})
 
 

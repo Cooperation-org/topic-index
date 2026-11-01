@@ -47,7 +47,11 @@ def post_json(url, body, timeout=120, tries=3):
             req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
                 "User-Agent": kg.UA, "Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.read().decode("utf-8-sig")
+                raw = resp.read()
+                try:
+                    return raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    return raw.decode("latin-1")
         except Exception:
             if i == tries - 1:
                 raise
@@ -98,3 +102,30 @@ def energy_sector(l, code):
 def iso3_place(l, iso3, name=None):
     """Country by ISO3; Kosovo, which has no ISO code, becomes its own place XKX."""
     return l.country(iso3=iso3) or (l.other_place("XKX", "Kosovo") if iso3 in ("XKX", "KOS") else None)
+
+
+WASTE_SPECIAL = ("agricultural", "construction-demolition", "e-waste", "hazardous", "industrial", "medical")
+
+
+def waste_sector(l, code):
+    """Sector id in scheme waste: msw (composition, treatment) and special wastes. Names come from the code."""
+    if code in ("msw", "special"):
+        parent = None
+    elif code in ("composition", "treatment"):
+        parent = "msw"
+    elif code.startswith(("composition-", "treatment-")):
+        parent = code.split("-", 1)[0]
+    elif code in WASTE_SPECIAL:
+        parent = "special"
+    else:
+        parent = None
+    names = {"msw": "Municipal solid waste", "special": "Special waste", "e-waste": "Electronic waste",
+             "composition": "Composition", "treatment": "Treatment",
+             "composition-food-organic": "Food and organic", "composition-paper-cardboard": "Paper and cardboard",
+             "composition-rubber-leather": "Rubber and leather", "composition-yard-garden": "Yard and garden",
+             "composition-other-material": "Other material", "construction-demolition": "Construction and demolition",
+             "treatment-landfill-unspecified": "Landfill, unspecified", "treatment-sanitary-landfill": "Sanitary landfill with gas system",
+             "treatment-unaccounted": "Unaccounted for", "treatment-waterways-marine": "Waterways and marine",
+             "treatment-other-treatment": "Other treatment"}
+    name = names.get(code) or code.split("-", 1)[-1].replace("-", " ").capitalize()
+    return l.sector("waste", code, name, waste_sector(l, parent) if parent else None)

@@ -44,3 +44,11 @@ SELECT DISTINCT from_place AS place_id, source_id, measure_id, 'flow' AS kind FR
 UNION SELECT DISTINCT to_place, source_id, measure_id, 'flow' FROM kg.flow_pairs
 UNION SELECT DISTINCT place_id, source_id, measure_id, 'stat' FROM kg.stats WITH NO DATA;
 CREATE UNIQUE INDEX IF NOT EXISTS place_datasets_key ON kg.place_datasets (place_id, source_id, measure_id, kind);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS kg.place_country AS
+WITH RECURSIVE up AS (SELECT id AS place_id, id AS at, parent_id, kind FROM kg.places
+                      UNION ALL SELECT u.place_id, p.id, p.parent_id, p.kind FROM up u JOIN kg.places p ON p.id = u.parent_id
+                      WHERE u.kind <> 'country')
+SELECT place_id, at AS country_id FROM up WHERE kind = 'country' WITH NO DATA;
+CREATE UNIQUE INDEX IF NOT EXISTS place_country_key ON kg.place_country (place_id);
+CREATE INDEX IF NOT EXISTS place_country_country ON kg.place_country (country_id);

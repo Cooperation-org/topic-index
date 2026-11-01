@@ -56,7 +56,7 @@ details summary { cursor:pointer; }
 .chip { padding:4px 9px; border:1px solid var(--line); border-radius:999px; background:var(--raised); cursor:pointer; font-size:12.5px; }
 .chip:hover { background:var(--hover); } .chip.on { border-color:var(--out); color:var(--out); }
 #legend, #sites { z-index:2; }
-#legend { position:absolute; left:12px; bottom:28px; background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; max-width:320px; }
+#legend { position:absolute; left:12px; bottom:36px; background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; max-width:320px; }
 #legend .ramp { height:8px; border-radius:4px; background:linear-gradient(to right,#cde2fb,#86b6ef,#3987e5,#256abf,#0d366b); margin:4px 0 2px; }
 #legend .ends { display:flex; justify-content:space-between; color:var(--muted); }
 #sites { position:absolute; left:12px; top:12px; display:flex; flex-wrap:wrap; gap:4px; max-width:calc(100% - 70px); }
@@ -67,7 +67,7 @@ details summary { cursor:pointer; }
 #sources th { position:sticky; top:0; background:var(--surface); }
 #sources input { padding:7px 10px; background:var(--raised); border:1px solid var(--line); border-radius:8px; width:320px; max-width:100%; }
 .maplibregl-popup-content { background:var(--raised); color:var(--text); font-size:13px; } .maplibregl-popup-tip { display:none; }
-@media (max-width:820px) { #app { grid-template-columns:1fr; grid-template-rows:48dvh 1fr; } #side { border-left:0; border-top:1px solid var(--line); } }
+@media (max-width:820px) { #legend { bottom:40px; padding:4px 8px; font-size:11px; max-width:200px; } #app { grid-template-columns:1fr; grid-template-rows:48dvh 1fr; } #side { border-left:0; border-top:1px solid var(--line); } }
 </style>
 </head>
 <body>
@@ -195,7 +195,7 @@ async function paintMap() {
   cs.forEach(r => { m.push(r.iso3, RAMP[Math.min(RAMP.length-1, Math.floor((Math.log10(r.value)-lo)/((hi-lo)||1)*RAMP.length))]); });
   m.push('rgba(0,0,0,0)');
   map.setPaintProperty('country-fill', 'fill-color', m);
-  map.setPaintProperty('country-fill', 'fill-opacity', .72);
+  map.setPaintProperty('country-fill', 'fill-opacity', ['interpolate', ['linear'], ['zoom'], 2, .72, 5, .4, 8, .12]);
   $('legend').hidden = false;
   $('legend').innerHTML = esc(d.measure_name) + ', ' + state.year + ' (log scale)<div class="ramp"></div><div class="ends"><span>' + fmt(cs[cs.length-1].value, d.unit) + '</span><span>' + fmt(cs[0].value, d.unit) + '</span></div>';
   return values;
@@ -262,7 +262,7 @@ async function render() {
     if (placeInfo.entities.length) {
       html += '<h2>Organizations and sites</h2><div class="chips">' + placeInfo.entities.map(e => '<button class="chip" data-kind="' + esc(e.kind) + '">' + esc(KIND_NAMES[e.kind] || e.kind) + ' ' + e.n.toLocaleString() + '</button>').join('') + '</div><div id="entity-list"></div>';
       const owners = await api('place/' + state.place + '/owners');
-      if (owners.length) html += '<h2>Foreign parents of companies here</h2>' + bars(owners.slice(0, 15).map(o => ({id:o.country_id, label:o.parent + ' (' + o.country + ')', value:o.children})), {unit:'companies', click:'place'});
+      if (owners.length) html += '<h2>Foreign parents, by companies held here</h2>' + bars(owners.slice(0, 15).map(o => ({id:o.country_id, label:o.parent + ' (' + o.country + ')', value:o.children})), {click:'place'});
     }
     if (placeInfo.children.length) html += '<h2>Inside ' + esc(placeInfo.name) + '</h2><div class="chips">' + placeInfo.children.map(c => '<button class="chip" data-place="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
     const elsewhere = datasets.filter(x => placeInfo.datasets.includes(dkey(x)) && dkey(x) !== state.key);
@@ -273,6 +273,13 @@ async function render() {
 
 async function select(id, fly = true) {
   state.place = id;
+  const info = await api('place/' + id);
+  if (info.datasets.length && !info.datasets.includes(state.key)) {
+    const was = ds()?.family, options = datasets.filter(d => info.datasets.includes(dkey(d)));
+    const next = options.find(d => d.family === was) || options.find(d => d.kind === 'flow') || options[0];
+    if (next) { state.sector = null; setDataset(dkey(next)); }
+  }
+  map.getSource('marks').setData(!info.iso3 && info.lat != null ? {type:'FeatureCollection', features:[{type:'Feature', geometry:{type:'Point', coordinates:[info.lon, info.lat]}, properties:{label:info.name}}]} : emptyFC);
   await render();
   if (fly && placeInfo?.lat !== null && placeInfo?.lat !== undefined) {
     const z = {world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 3;
