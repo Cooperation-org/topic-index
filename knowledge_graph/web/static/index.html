@@ -470,10 +470,10 @@ async function select(id, fly = true) {
       const pick = next && info.datasets.includes(dkey(next)) ? next : datasets.filter(d => info.datasets.includes(dkey(d))).sort((a, b) => (b.kind === 'flow') - (a.kind === 'flow'))[0];
       if (pick) { state.sector = null; setDataset(dkey(pick)); }
     }
+    if (fly && info.lat != null) map.flyTo({center:[info.lon, info.lat], zoom:{world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[info.kind] || 3, padding:innerWidth > 820 ? {right:390} : {bottom:innerHeight*.4}, duration:1600});
     map.getSource('marks').setData(!info.iso3 && info.lat != null ? {type:'FeatureCollection', features:[{type:'Feature', geometry:{type:'Point', coordinates:[info.lon, info.lat]}, properties:{label:info.name}}]} : emptyFC);
   } else map.getSource('marks').setData(emptyFC);
   await render();
-  if (fly && placeInfo?.lat != null) map.flyTo({center:[placeInfo.lon, placeInfo.lat], zoom:{world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 3, padding:innerWidth > 820 ? {right:390} : {bottom:innerHeight*.4}, maxDuration:2200});
 }
 const openPanel = () => document.body.classList.remove('closed');
 $('close-panel').onclick = () => document.body.classList.add('closed');
