@@ -1,0 +1,17 @@
+slug: employment-law-cross-border
+name: Employment law across borders
+description: Hiring, contractor classification, dismissal, payroll and employer-of-record rules for teams that work with people in many countries.
+queries:
+  - hiring remote workers in another country legal requirements comparison
+  - independent contractor misclassification rules by country
+  - employer of record vs contractor compliance by country
+  - permanent establishment risk remote employees abroad
+  - international contractor agreement intellectual property assignment law
+  - cooperative member worker vs employee status law
+expand:
+  - values: {country: countries}
+    templates:
+      - "{country} employment law hiring remote workers for a foreign company"
+      - "{country} independent contractor vs employee classification law"
+      - "{country} termination notice severance law"
+      - "{country} employer of record payroll tax social security obligations foreign company"

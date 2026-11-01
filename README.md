@@ -11,6 +11,7 @@ Topic-specific tables sit on top of the shared pages. The first is `funds` for f
 | `topics/gp-theses.yaml` | What venture, impact and employee-ownership funds say they invest in |
 | `topics/supply-chain-regulation.yaml` | Due diligence, traceability, forced-labour, deforestation and product passport rules, worldwide |
 | `topics/employee-ownership-law.yaml` | Employee share plans, stock options, ownership trusts and worker cooperative law, by country |
+| `topics/employment-law-cross-border.yaml` | Hiring, contractor classification, dismissal and payroll rules for teams across countries |
 
 A topic file has literal `queries` and `expand` blocks (templates times value lists). `values: {country: countries}` uses the shared list in `topics/_countries.yaml`. The value used is stored on the query as `facets`, so pages can be filtered by country, sector or region.
 
