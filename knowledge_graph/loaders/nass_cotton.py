@@ -1,4 +1,6 @@
-"""USDA NASS Quick Stats bulk files: state and national crop and livestock statistics, latest 10 years, by commodity (includes cotton)."""
+"""USDA NASS Quick Stats bulk files: state and national crop and livestock statistics, latest 10 years, by commodity (includes cotton).
+
+Annual totals only: calendar year or marketing year (where crop values are published), plus first of January inventories."""
 import csv
 import datetime
 import gzip
@@ -30,7 +32,7 @@ def read(path):
         for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE):
             if (r["AGG_LEVEL_DESC"] in ("STATE", "NATIONAL") and r["YEAR"].isdigit() and int(r["YEAR"]) >= FIRST_YEAR
                     and r["DOMAIN_DESC"] == "TOTAL" and (r["PRODN_PRACTICE_DESC"], r["UTIL_PRACTICE_DESC"]) == ALL
-                    and ((r["FREQ_DESC"] == "ANNUAL" and r["REFERENCE_PERIOD_DESC"] == "YEAR")
+                    and ((r["FREQ_DESC"] == "ANNUAL" and r["REFERENCE_PERIOD_DESC"] in ("YEAR", "MARKETING YEAR"))
                          or (r["STATISTICCAT_DESC"] == "INVENTORY" and r["REFERENCE_PERIOD_DESC"] == "FIRST OF JAN"))):
                 yield r
 
@@ -45,7 +47,7 @@ def main():
         if l.done(prefix):
             continue
         path = kg.download("https://www.nass.usda.gov" + href, d / (prefix + "txt.gz"))
-        best = {}  # (state, year, measure, sector) -> (census?, value); a survey value beats a census one
+        best = {}  # (state, year, measure, sector) -> ((census?, marketing year?), value); survey beats census, calendar year beats marketing year
         meta = {}
         for r in read(path):
             v = num(r["VALUE"])
@@ -56,7 +58,7 @@ def main():
             meta[m] = (r["STATISTICCAT_DESC"].title(), r["UNIT_DESC"])
             s = (r["SECTOR_DESC"], r["GROUP_DESC"], r["COMMODITY_DESC"], r["CLASS_DESC"])
             k = (place, int(r["YEAR"]), m, s)
-            flag = r["SOURCE_DESC"] != "SURVEY"
+            flag = (r["SOURCE_DESC"] != "SURVEY", r["REFERENCE_PERIOD_DESC"] != "YEAR")
             if k not in best or flag < best[k][0]:
                 best[k] = (flag, v)
         path.unlink()

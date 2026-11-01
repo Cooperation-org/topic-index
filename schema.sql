@@ -55,5 +55,7 @@ CREATE TABLE IF NOT EXISTS funds (
     host        text PRIMARY KEY,
     name        text,
     found_via   text NOT NULL,            -- page url or import name
-    crawled_at  timestamptz
+    crawled_at  timestamptz,
+    excluded    text                      -- why this host is not shown as a fund (a list page, defense, ...)
 );
+ALTER TABLE funds ADD COLUMN IF NOT EXISTS excluded text;
