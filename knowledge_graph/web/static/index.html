@@ -233,9 +233,11 @@ const api = async (path, params) => {
 function fmt(v, unit) {
   if (v === null || v === undefined) return '';
   const a = Math.abs(v), s = a >= 1e12 ? (v/1e12).toFixed(a >= 1e13 ? 1 : 2) + 'T' : a >= 1e9 ? (v/1e9).toFixed(a >= 1e11 ? 0 : 1) + 'B' : a >= 1e6 ? (v/1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M' : a >= 1e3 ? (v/1e3).toFixed(a >= 1e5 ? 0 : 1) + 'K' : (a < 10 && a !== Math.floor(a) ? v.toFixed(2) : Math.round(v).toString());
-  if (/^USD/.test(unit || '')) return '$' + s + (unit === 'USD' ? '' : ' ' + unit.replace('USD_', '') + ' dollars');
+  if (/^USD/.test(unit || '')) return '$' + s;
   return s + (unit ? ' ' + unit.replace(/_/g, ' ') : '');
 }
+const num = (v, unit) => fmt(v, /^USD/.test(unit || '') ? unit : '');
+const unitNote = unit => /^USD$/.test(unit || '') ? '' : ' · ' + (unit || '').replace('USD_', '').replace(/_/g, ' ') + (/^USD_/.test(unit || '') ? ' dollars' : '');
 const dkey = d => d.source_id + ':' + d.measure_id + ':' + d.kind;
 const ds = () => datasets.find(d => dkey(d) === state.key);
 const shortName = n => n.replace(/,? (current )?US\$$/, '').replace(/, USD$/, '').replace(/, exporter to importer$/, '');
@@ -408,7 +410,7 @@ function setDataset(key) {
 // Panel
 function bars(list, opts) {
   const max = Math.max(...list.map(r => r.value), 1);
-  return list.map(r => '<button class="bar ' + (opts.cls || '') + (opts.click ? '' : ' plain') + '" ' + (opts.click ? 'data-' + opts.click + '="' + r.id + '"' : 'type="button"') + ' title="' + esc(r.label) + '"><div class="l"><span>' + esc(r.label) + '</span><span>' + fmt(r.value, opts.unit) + '</span></div><div class="t" style="width:' + Math.max(.5, 100*r.value/max) + '%"></div></button>').join('');
+  return list.map(r => '<button class="bar ' + (opts.cls || '') + (opts.click ? '' : ' plain') + '" ' + (opts.click ? 'data-' + opts.click + '="' + r.id + '"' : 'type="button"') + ' title="' + esc(r.label) + '"><div class="l"><span>' + esc(r.label) + '</span><span>' + num(r.value, opts.unit) + '</span></div><div class="t" style="width:' + Math.max(.5, 100*r.value/max) + '%"></div></button>').join('');
 }
 
 async function render() {
@@ -438,16 +440,16 @@ async function render() {
   else map.getSource('arcs').setData(emptyFC);
   const yr = state.year;
   const head = placeInfo?.headline || [];
-  if (head.length) html += '<div class="tiles">' + head.slice(0, 4).map(h => '<div class="tile"><b>' + fmt(h.value, h.unit.replace(/^people$/, '')) + '</b><span>' + esc(shortName(h.name)) + ' ' + h.year + '</span></div>').join('') + '</div>' + (head.length > 4 ? '<details class="more"><summary>' + (head.length - 4) + ' more numbers</summary><div class="stats">' + head.slice(4).map(h => '<span>' + esc(shortName(h.name)) + ' ' + h.year + '</span><span>' + fmt(h.value, h.unit) + '</span>').join('') + '</div></details>' : '');
+  if (head.length) html += '<div class="tiles">' + head.slice(0, 4).map(h => '<div class="tile"><b>' + fmt(h.value, new RegExp(h.unit.replace(/_/g, ' '), 'i').test(h.name) || /^(people|count)$/.test(h.unit) ? '' : h.unit) + '</b><span>' + esc(shortName(h.name)) + ' ' + h.year + '</span></div>').join('') + '</div>' + (head.length > 4 ? '<details class="more"><summary>' + (head.length - 4) + ' more numbers</summary><div class="stats">' + head.slice(4).map(h => '<span>' + esc(shortName(h.name)) + ' ' + h.year + '</span><span>' + fmt(h.value, h.unit) + '</span>').join('') + '</div></details>' : '');
   if (isFlow && placeInfo) {
-    html += list.length ? '<h2>' + (state.dir === 'out' ? 'To' : 'From') + ', ' + yr + '</h2>' + bars(list.map(r => ({id:r.b_id, label:r.b_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir}) : '<p class="note">No rows for ' + esc(placeInfo.name) + ', ' + yr + '.</p>';
+    html += list.length ? '<h2>' + (state.dir === 'out' ? 'To' : 'From') + ', ' + yr + unitNote(d.unit) + '</h2>' + bars(list.map(r => ({id:r.b_id, label:r.b_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir}) : '<p class="note">No rows for ' + esc(placeInfo.name) + ', ' + yr + '.</p>';
   } else if (isFlow) {
-    html += '<h2>Largest pairs, ' + yr + '</h2>' + bars(list.slice(0, 8).map(r => ({id:state.dir === 'out' ? r.a_id : r.b_id, label:state.dir === 'out' ? r.a_name + ' → ' + r.b_name : r.b_name + ' → ' + r.a_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir});
+    html += '<h2>Largest pairs, ' + yr + unitNote(d.unit) + '</h2>' + bars(list.slice(0, 8).map(r => ({id:state.dir === 'out' ? r.a_id : r.b_id, label:state.dir === 'out' ? r.a_name + ' → ' + r.b_name : r.b_name + ' → ' + r.a_name, value:r.value})), {unit:d.unit, click:'place', cls:state.dir});
   }
-  if (sizes.length) html += '<h2>Sectors, ' + yr + '</h2>' + bars(sizes.slice(0, 15).map(s => ({id:s.id, label:s.name, value:s.value})), {unit:d.unit, click:'sector', cls:isFlow ? state.dir : ''});
+  if (sizes.length) html += '<h2>Sectors, ' + yr + unitNote(d.unit) + '</h2>' + bars(sizes.slice(0, 15).map(s => ({id:s.id, label:s.name, value:s.value})), {unit:d.unit, click:'sector', cls:isFlow ? state.dir : ''});
   if (!placeInfo || !isFlow) {
     const ranked = (values || []).filter(r => r.kind === 'country' || r.kind === 'admin1').slice(0, 20);
-    if (ranked.length) html += '<h2>' + (isFlow ? (state.dir === 'out' ? 'Largest senders' : 'Largest receivers') : 'Largest') + ', ' + yr + '</h2>' + bars(ranked.map(r => ({id:r.id, label:r.name, value:r.value})), {unit:d.unit, click:'place', cls:isFlow ? state.dir : ''});
+    if (ranked.length) html += '<h2>' + (isFlow ? (state.dir === 'out' ? 'Largest senders' : 'Largest receivers') : 'Largest') + ', ' + yr + unitNote(d.unit) + '</h2>' + bars(ranked.map(r => ({id:r.id, label:r.name, value:r.value})), {unit:d.unit, click:'place', cls:isFlow ? state.dir : ''});
   }
   if (placeInfo) {
     if (placeInfo.entities.length) html += '<h2>Organizations and sites</h2><div class="chips">' + placeInfo.entities.map(e => '<button class="chip small" data-kind="' + esc(e.kind) + '">' + esc(KIND_NAMES[e.kind] || e.kind) + ' ' + e.n.toLocaleString() + '</button>').join('') + '</div><div id="entity-list"></div>';
@@ -471,7 +473,7 @@ async function select(id, fly = true) {
     map.getSource('marks').setData(!info.iso3 && info.lat != null ? {type:'FeatureCollection', features:[{type:'Feature', geometry:{type:'Point', coordinates:[info.lon, info.lat]}, properties:{label:info.name}}]} : emptyFC);
   } else map.getSource('marks').setData(emptyFC);
   await render();
-  if (fly && placeInfo?.lat != null) map.flyTo({center:[placeInfo.lon, placeInfo.lat], zoom:{world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 3, padding:innerWidth > 820 ? {right:390} : {bottom:innerHeight*.4}});
+  if (fly && placeInfo?.lat != null) map.flyTo({center:[placeInfo.lon, placeInfo.lat], zoom:{world:1.6, region:2.2, country:3.4, admin1:5.5, admin2:7, city:9}[placeInfo.kind] || 3, padding:innerWidth > 820 ? {right:390} : {bottom:innerHeight*.4}, maxDuration:2200});
 }
 const openPanel = () => document.body.classList.remove('closed');
 $('close-panel').onclick = () => document.body.classList.add('closed');
